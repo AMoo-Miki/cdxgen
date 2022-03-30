@@ -34,7 +34,7 @@ const MAX_LICENSE_ID_LENGTH = 100;
  */
 const getAllFiles = function (dirPath, pattern) {
   try {
-    return glob.sync(pattern, {
+    return Array.from(new Set(glob.sync(pattern, {
       cwd: dirPath,
       silent: true,
       absolute: true,
@@ -44,6 +44,7 @@ const getAllFiles = function (dirPath, pattern) {
       follow: false,
       ignore: [
         "node_modules",
+        "**/node_modules/**",
         ".hg",
         ".git",
         "venv",
@@ -51,7 +52,7 @@ const getAllFiles = function (dirPath, pattern) {
         "examples",
         "site-packages",
       ],
-    });
+    }).map(p => fs.realpathSync(p))));
   } catch (err) {
     console.error(err);
     return [];
@@ -311,9 +312,27 @@ const parseYarnLock = async function (yarnLockFile) {
   if (fs.existsSync(yarnLockFile)) {
     const lockData = fs.readFileSync(yarnLockFile, "utf8");
     let name = "";
+    let alias = "";
     let group = "";
     let version = "";
     let integrity = "";
+    let identifiers = undefined;
+    let resolved = false;
+    let reResolved = /^resolved\s+"https:\/\/registry\.(?:yarnpkg\.com|npmjs\.org)\/(.+?)\/-\/(?:.+?)-(\d+\..+?)\.tgz/;
+    let match;
+    const parseName = fullName => {
+      let group, name;
+      if (fullName.indexOf("/") > -1) {
+        const parts = fullName.split("/");
+        group = parts[0];
+        name = parts[1];
+      } else {
+        name = fullName;
+      }
+
+      return { group, name };
+    };
+
     lockData.split("\n").forEach((l) => {
       if (
         l === "\n" ||
@@ -324,29 +343,34 @@ const parseYarnLock = async function (yarnLockFile) {
         return;
       }
       if (!l.startsWith(" ")) {
-        const tmpA = l.replace(/["']/g, "").split("@");
-        // ignore possible leading empty strings
-        if (tmpA[0] === "") {
-          tmpA.shift();
+        if (name !== "" && version !== "" && integrity !== "" && !resolved) {
+          pkgList.push({
+            group: group,
+            name: name,
+            alias: alias,
+            identifiers: identifiers,
+            version: version,
+            _integrity: integrity,
+          });
         }
+
+        const tmpA = l.replace(/["']/g, "").replace(/^@/, '!').split("@");
         if (tmpA.length >= 2) {
-          const fullName = tmpA[0];
-          if (fullName.indexOf("/") > -1) {
-            const parts = fullName.split("/");
-            group = parts[0];
-            name = parts[1];
-          } else {
-            name = fullName;
-          }
+          ({ group, name } = parseName(tmpA[0].replace(/^!/, '@')));
+          alias = "";
         }
+        identifiers = l.replace(/(["']|:\s*$)/g, "").split(/\s*,\s*/);
       } else {
         l = l.trim();
         const parts = l.split(" ");
-        if (l.startsWith("version")) {
+        if (l.startsWith("version") && !resolved) {
           version = parts[1].replace(/"/g, "");
         }
         if (l.startsWith("integrity")) {
           integrity = parts[1];
+        }
+        if (l.startsWith("name")) {
+          alias = parts[1];
         }
         // checksum used by yarn 2/3 is hex encoded
         if (l.startsWith("checksum")) {
@@ -359,21 +383,43 @@ const parseYarnLock = async function (yarnLockFile) {
             const digest = tmpB[1].replace(/"/g, "");
             integrity = "sha256-" + digest;
           }
+
+          match = l.match(reResolved);
+          if (match) {
+            resolved = true;
+            ({ group, name } = parseName(match[1]));
+            version = match[2];
+          }
         }
       }
-      if (name !== "" && version !== "" && integrity != "") {
+      if (name !== "" && version !== "" && integrity !== "" && resolved) {
         pkgList.push({
           group: group,
           name: name,
+          alias: alias,
+          identifiers: identifiers,
           version: version,
           _integrity: integrity,
         });
         group = "";
         name = "";
+        alias = "";
         version = "";
         integrity = "";
+        identifiers = undefined;
+        resolved = false;
       }
     });
+    if (name !== "" && version !== "" && integrity !== "" && !resolved) {
+      pkgList.push({
+        group: group,
+        name: name,
+        alias: alias,
+        identifiers: identifiers,
+        version: version,
+        _integrity: integrity,
+      });
+    }
   }
   if (process.env.FETCH_LICENSE) {
     if (DEBUG_MODE) {
