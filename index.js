@@ -1652,7 +1652,7 @@ const createPHPBom = async (path, options) => {
       console.log(versionResult.error, versionResult.stderr);
       return {};
     }
-    const composerVersion = versionResult.stdout.match(/version (\d)/)[1];
+    const composerVersion = versionResult.stdout.match(/(?:version|composer)\s+(.+?)(?:\s|$)/i)[1];
     if (DEBUG_MODE) {
       console.log("Detected composer version:", composerVersion);
     }
