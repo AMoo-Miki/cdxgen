@@ -1087,7 +1087,7 @@ const createNodejsBom = async (path, options) => {
   );
   const minJsFiles = utils.getAllFiles(
     path,
-    (options.multiProject ? "**/" : "") + "*min.js"
+    (options.multiProject ? "**/" : "") + "*[.-]min.js"
   );
   const bowerFiles = utils.getAllFiles(
     path,
