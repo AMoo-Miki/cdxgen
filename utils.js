@@ -1,7 +1,6 @@
 const glob = require("glob");
 const os = require("os");
 const path = require("path");
-const parsePackageJsonName = require("parse-packagejson-name");
 const fs = require("fs");
 const got = require("got");
 const convert = require("xml-js");
@@ -25,6 +24,27 @@ const DEBUG_MODE =
 let metadata_cache = {};
 
 const MAX_LICENSE_ID_LENGTH = 100;
+
+const nameRegExp = /^(?:(@[^/]+)\/)?(([^.]+)(?:\.(.*))?)$/;
+
+const parsePackageJsonName = (name) => {
+  const returnObject = {
+    scope: null,
+    fullName: '',
+    projectName: '',
+    moduleName: '',
+  };
+  const match = (typeof name === 'object' ? (name.name || '') : name || '').match(nameRegExp);
+  if (match) {
+    returnObject.scope = match[1] || null;
+    returnObject.fullName = match[2] || match[0];
+    returnObject.projectName = match[3] === match[2] ? null : match[3];
+    returnObject.moduleName = match[4] || match[2] || null;
+  }
+  return returnObject;
+};
+exports.parsePackageJsonName = parsePackageJsonName;
+
 
 /**
  * Method to get files matching a pattern
@@ -239,6 +259,7 @@ const _getDepPkgList = async function (pkgList, pkg) {
         name: name,
         version: pkg.dependencies[name].version,
         _integrity: pkg.dependencies[name].integrity,
+        dev: pkg.dependencies[name].dev
       });
       // Include child dependencies
       if (pkg.dependencies[name].dependencies) {
