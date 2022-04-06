@@ -47,6 +47,8 @@ const HASH_PATTERN =
 // Timeout milliseconds. Default 10 mins
 const TIMEOUT_MS = process.env.CDXGEN_TIMEOUT_MS || 10 * 60 * 1000;
 
+const GITHUB_URL_PATTERN = /^[a-z+]+:\/\/git@(github\.com|bitbucket\.org)\/(.+?)\.git(?:#(.*))?$/i
+
 /**
  * Method to create global external references
  *
@@ -216,12 +218,15 @@ function addComponent(
   if (!pkg || pkg.extraneous) {
     return;
   }
+
+  let pptype = ptype;
+
   if (!isRootPkg) {
     let pkgIdentifier = utils.parsePackageJsonName(pkg.name);
-    let group = pkg.group || pkgIdentifier.scope;
-    // Create empty group
-    group = group || "";
-    let name = pkgIdentifier.fullName || pkg.name || "";
+    let group = pkg.group || pkgIdentifier.scope || '';
+    let name = pkgIdentifier.fullName || pkg.name || '';
+    const version = pkg.version;
+    let pversion = version;
     // name is mandatory
     if (!name) {
       return;
@@ -233,13 +238,19 @@ function addComponent(
     ) {
       return;
     }
-    let version = pkg.version;
+
+    const m = version.match(GITHUB_URL_PATTERN);
+    if (m !== null) {
+      pptype = m[1].replace(/\.(com|org)$/i, '');
+      pversion = m[3];
+    }
+
     let licenses = utils.getLicenses(pkg, format);
     let purl = new PackageURL(
-      ptype,
+      pptype,
       group,
       name,
-      version,
+      pversion,
       pkg.qualifiers,
       pkg.subpath
     );
