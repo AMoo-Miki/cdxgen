@@ -1,4 +1,3 @@
-const parsePackageJsonName = require("parse-packagejson-name");
 const os = require("os");
 const pathLib = require("path");
 const ssri = require("ssri");
@@ -211,7 +210,7 @@ function addComponent(
     return;
   }
   if (!isRootPkg) {
-    let pkgIdentifier = parsePackageJsonName(pkg.name);
+    let pkgIdentifier = utils.parsePackageJsonName(pkg.name);
     let group = pkg.group || pkgIdentifier.scope;
     // Create empty group
     group = group || "";
@@ -222,7 +221,7 @@ function addComponent(
     }
     // Skip @types package for npm
     if (
-      ptype == "npm" &&
+      ptype === "npm" &&
       (group === "types" || !name || name.startsWith("@types"))
     ) {
       return;
@@ -253,7 +252,7 @@ function addComponent(
         impPkgs.includes(group) ||
         impPkgs.includes("@" + group)
       ) {
-        compScope = "required";
+        compScope = pkg.dev ? "optional" : "required";
       } else if (impPkgs.length) {
         compScope = "optional";
       }
