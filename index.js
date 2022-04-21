@@ -287,6 +287,7 @@ function addComponent(
       hashes: [],
       licenses,
       purl: purlString,
+      supplier: pptype,
       externalReferences: addExternalReferences(pkg, format),
     };
     if (format === "xml") {
