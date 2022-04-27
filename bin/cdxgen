@@ -9,6 +9,10 @@ const args = require("yargs")
     alias: "o",
     description: "Output file for bom.xml or bom.json. Default console",
   })
+  .option("format", {
+    alias: "f",
+    description: "Output format, XML or JSON. Default both",
+  })
   .option("type", {
     alias: "t",
     description: "Project type",
@@ -77,6 +81,7 @@ let options = {
   multiProject: args.recurse,
   depth: 3,
   output: args.output,
+  format: args.output && args.format?.toUpperCase(),
   resolveClass: args.resolveClass,
   installDeps: true,
 };

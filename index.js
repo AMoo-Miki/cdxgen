@@ -437,26 +437,20 @@ const buildBomXml = (serialNum, components, context) => {
 /**
  * Return the BOM in xml, json format including any namespace mapping
  */
-const buildBomNSData = (pkgInfo, ptype, context) => {
+const buildBomNSData = (pkgInfo, ptype, context = {}) => {
   const bomNSData = {
-    bomXml: undefined,
-    bomXmlFiles: undefined,
-    bomJson: undefined,
-    bomJsonFiles: undefined,
-    nsMapping: undefined,
+    nsMapping: context.nsMapping || {},
   };
   const serialNum = "urn:uuid:" + uuidv4();
   let allImports = {};
   if (context && context.allImports) {
     allImports = context.allImports;
   }
-  const nsMapping = context.nsMapping || {};
-  const metadata = addMetadata("json");
-  const components = listComponents(allImports, pkgInfo, ptype, "xml");
-  if (components && components.length) {
-    const bomString = buildBomXml(serialNum, components, context);
-    // CycloneDX 1.4 Json Template
-    const jsonTpl = {
+
+  if (!context.format || context.format === 'JSON') {
+    const metadata = addMetadata("json");
+
+    bomNSData.bomJson = {
       bomFormat: "CycloneDX",
       specVersion: "1.4",
       serialNumber: serialNum,
@@ -464,17 +458,23 @@ const buildBomNSData = (pkgInfo, ptype, context) => {
       metadata: metadata,
       components: listComponents(allImports, pkgInfo, ptype, "json"),
     };
-    if (context && context.src && context.filename) {
-      jsonTpl.externalReferences = addGlobalReferences(
-        context.src,
-        context.filename,
-        "json"
+
+    if (context.src && context.filename) {
+      bomNSData.bomJson.externalReferences = addGlobalReferences(
+          context.src,
+          context.filename,
+          "json"
       );
     }
-    bomNSData.bomXml = bomString;
-    bomNSData.bomJson = jsonTpl;
-    bomNSData.nsMapping = nsMapping;
   }
+
+  if (!context.format || context.format === 'XML') {
+    const components = listComponents(allImports, pkgInfo, ptype, "xml");
+    if (components?.length) {
+      bomNSData.bomXml = buildBomXml(serialNum, components, context);
+    }
+  }
+
   return bomNSData;
 };
 
@@ -506,6 +506,7 @@ const createJarBom = (path, options) => {
     src: path,
     filename: jarFiles.join(", "),
     nsMapping: {},
+    format: options.format,
   });
 };
 
@@ -549,6 +550,7 @@ const createJavaBom = async (path, options) => {
       src: pathLib.dirname(path),
       filename: path,
       nsMapping: jarNSMapping,
+      format: options.format,
     });
   } else {
     // maven - pom.xml
@@ -642,6 +644,7 @@ const createJavaBom = async (path, options) => {
             src: path,
             filename: "pom.xml",
             nsMapping: jarNSMapping,
+            format: options.format,
           });
         }
       } // for
@@ -820,6 +823,7 @@ const createJavaBom = async (path, options) => {
         src: path,
         filename: "build.gradle",
         nsMapping: jarNSMapping,
+        format: options.format,
       });
     }
 
@@ -892,6 +896,7 @@ const createJavaBom = async (path, options) => {
             src: path,
             filename: "BUILD",
             nsMapping: {},
+            format: options.format,
           });
         }
       }
@@ -1050,6 +1055,7 @@ const createJavaBom = async (path, options) => {
         src: path,
         filename: sbtProjects.join(", "),
         nsMapping: jarNSMapping,
+        format: options.format,
       });
     }
   }
@@ -1079,6 +1085,7 @@ const createNodejsBom = async (path, options) => {
         allImports: {},
         src: path,
         filename: "package.json",
+        format: options.format,
       });
     }
   }
@@ -1135,6 +1142,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   } else if (pkgLockFiles && pkgLockFiles.length) {
     manifestFiles = manifestFiles.concat(pkgLockFiles);
@@ -1149,6 +1157,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   } else if (fs.existsSync(pathLib.join(path, "rush.json"))) {
     // Rush.js creates node_modules inside common/temp directory
@@ -1183,6 +1192,7 @@ const createNodejsBom = async (path, options) => {
         allImports,
         src: path,
         filename: "shrinkwrap-deps.json",
+        format: options.format,
       });
     } else if (fs.existsSync(pnpmLock)) {
       const pkgList = await utils.parsePnpmLock(pnpmLock);
@@ -1190,6 +1200,7 @@ const createNodejsBom = async (path, options) => {
         allImports,
         src: path,
         filename: "pnpm-lock.yaml",
+        format: options.format,
       });
     } else {
       console.log(
@@ -1214,6 +1225,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   } else if (fs.existsSync(pathLib.join(path, "node_modules"))) {
     const pkgJsonFiles = utils.getAllFiles(
@@ -1231,6 +1243,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   }
   // Projects containing just min files or bower
@@ -1239,6 +1252,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1292,6 +1306,7 @@ const createPythonBom = async (path, options) => {
     return buildBomNSData(pkgList, "pypi", {
       src: path,
       filename: metadataFiles.join(", "),
+      format: options.format,
     });
   }
   // .whl files. Zip file containing dist-info directory
@@ -1308,6 +1323,7 @@ const createPythonBom = async (path, options) => {
     return buildBomNSData(pkgList, "pypi", {
       src: path,
       filename: whlFiles.join(", "),
+      format: options.format,
     });
   }
   if (requirementsMode || pipenvMode || poetryMode || setupPyMode) {
@@ -1320,6 +1336,7 @@ const createPythonBom = async (path, options) => {
         return buildBomNSData(pkgList, "pypi", {
           src: path,
           filename: "Pipfile.lock",
+          format: options.format,
         });
       } else {
         console.error("Pipfile.lock not found at", path);
@@ -1335,6 +1352,7 @@ const createPythonBom = async (path, options) => {
       return buildBomNSData(pkgList, "pypi", {
         src: path,
         filename: poetryFiles.join(", "),
+        format: options.format,
       });
     } else if (requirementsMode) {
       let metadataFilename = "requirements.txt";
@@ -1361,6 +1379,7 @@ const createPythonBom = async (path, options) => {
       return buildBomNSData(pkgList, "pypi", {
         src: path,
         filename: metadataFilename,
+        format: options.format,
       });
     } else if (setupPyMode) {
       const setupPyData = fs.readFileSync(setupPy, { encoding: "utf-8" });
@@ -1368,6 +1387,7 @@ const createPythonBom = async (path, options) => {
       return buildBomNSData(pkgList, "pypi", {
         src: path,
         filename: "setup.py",
+        format: options.format,
       });
     }
   }
@@ -1405,6 +1425,7 @@ const createGoBom = async (path, options) => {
       allImports,
       src: path,
       filename: path,
+      format: options.format,
     });
   }
 
@@ -1434,6 +1455,7 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(pkgList, "golang", {
       src: path,
       filename: gosumFiles.join(", "),
+      format: options.format,
     });
   }
 
@@ -1532,6 +1554,7 @@ const createGoBom = async (path, options) => {
           allImports,
           src: path,
           filename: gomodFiles.join(", "),
+          format: options.format,
         });
       }
     }
@@ -1552,6 +1575,7 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(pkgList, "golang", {
       src: path,
       filename: gomodFiles.join(", "),
+      format: options.format,
     });
   } else if (gopkgLockFiles.length) {
     for (let f of gopkgLockFiles) {
@@ -1569,6 +1593,7 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(pkgList, "golang", {
       src: path,
       filename: gopkgLockFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1606,6 +1631,7 @@ const createRustBom = async (path, options) => {
     return buildBomNSData(pkgList, "crates", {
       src: path,
       filename: cargoFiles.join(", "),
+      format: options.format,
     });
   }
   // Get the new lock files
@@ -1627,6 +1653,7 @@ const createRustBom = async (path, options) => {
     return buildBomNSData(pkgList, "crates", {
       src: path,
       filename: cargoLockFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1703,6 +1730,7 @@ const createPHPBom = async (path, options) => {
     return buildBomNSData(pkgList, "composer", {
       src: path,
       filename: composerLockFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1760,6 +1788,7 @@ const createRubyBom = async (path, options) => {
     return buildBomNSData(pkgList, "rubygems", {
       src: path,
       filename: gemLockFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1871,6 +1900,7 @@ const createCsharpBom = async (path, options) => {
     return buildBomNSData(pkgList, "nuget", {
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
