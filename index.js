@@ -449,26 +449,20 @@ const buildBomXml = (serialNum, components, context) => {
 /**
  * Return the BOM in xml, json format including any namespace mapping
  */
-const buildBomNSData = (options, pkgInfo, ptype, context) => {
+const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
   const bomNSData = {
-    bomXml: undefined,
-    bomXmlFiles: undefined,
-    bomJson: undefined,
-    bomJsonFiles: undefined,
-    nsMapping: undefined,
+    nsMapping: context.nsMapping || {},
   };
   const serialNum = "urn:uuid:" + uuidv4();
   let allImports = {};
   if (context && context.allImports) {
     allImports = context.allImports;
   }
-  const nsMapping = context.nsMapping || {};
-  const metadata = addMetadata("json");
-  const components = listComponents(options, allImports, pkgInfo, ptype, "xml");
-  if (components && components.length) {
-    const bomString = buildBomXml(serialNum, components, context);
-    // CycloneDX 1.4 Json Template
-    const jsonTpl = {
+
+  if (!context.format || context.format === 'JSON') {
+    const metadata = addMetadata("json");
+
+    bomNSData.bomJson = {
       bomFormat: "CycloneDX",
       specVersion: "1.4",
       serialNumber: serialNum,
@@ -476,17 +470,23 @@ const buildBomNSData = (options, pkgInfo, ptype, context) => {
       metadata: metadata,
       components: listComponents(options, allImports, pkgInfo, ptype, "json"),
     };
-    if (context && context.src && context.filename) {
-      jsonTpl.externalReferences = addGlobalReferences(
-        context.src,
-        context.filename,
-        "json"
+
+    if (context.src && context.filename) {
+      bomNSData.bomJson.externalReferences = addGlobalReferences(
+          context.src,
+          context.filename,
+          "json"
       );
     }
-    bomNSData.bomXml = bomString;
-    bomNSData.bomJson = jsonTpl;
-    bomNSData.nsMapping = nsMapping;
   }
+
+  if (!context.format || context.format === 'XML') {
+    const components = listComponents(options, allImports, pkgInfo, ptype, "xml");
+    if (components?.length) {
+      bomNSData.bomXml = buildBomXml(serialNum, components, context);
+    }
+  }
+
   return bomNSData;
 };
 
@@ -518,6 +518,7 @@ const createJarBom = (path, options) => {
     src: path,
     filename: jarFiles.join(", "),
     nsMapping: {},
+    format: options.format,
   });
 };
 
@@ -561,6 +562,7 @@ const createJavaBom = async (path, options) => {
       src: pathLib.dirname(path),
       filename: path,
       nsMapping: jarNSMapping,
+      format: options.format,
     });
   } else {
     // maven - pom.xml
@@ -654,6 +656,7 @@ const createJavaBom = async (path, options) => {
             src: path,
             filename: "pom.xml",
             nsMapping: jarNSMapping,
+            format: options.format,
           });
         }
       } // for
@@ -720,12 +723,12 @@ const createJavaBom = async (path, options) => {
           { cwd: path, encoding: "utf-8", timeout: TIMEOUT_MS }
         );
         if (result.status == 1 || result.error) {
-          if (result.stderr) {
-            console.error(result.stdout, result.stderr);
+          console.error(result.stdout, result.stderr);
+          if (DEBUG_MODE) {
+            console.log(
+              "1. Check if the correct version of java and gradle are installed and available in PATH. For example, some project might require Java 11 with gradle 7."
+            );
           }
-          console.log(
-            "1. Check if the correct version of java and gradle are installed and available in PATH. For example, some project might require Java 11 with gradle 7."
-          );
         }
         const stdout = result.stdout;
         if (stdout) {
@@ -844,9 +847,11 @@ const createJavaBom = async (path, options) => {
             if (dlist && dlist.length) {
               pkgList = pkgList.concat(dlist);
             } else {
-              console.log(
-                "No packages were detected. If this is a multi-project gradle application set the environment variable GRADLE_MULTI_PROJECT_MODE to true and try again."
-              );
+              if (DEBUG_MODE) {
+                console.log(
+                  "No packages were detected. If this is a multi-project gradle application set the environment variable GRADLE_MULTI_PROJECT_MODE to true and try again."
+                );
+              }
             }
           }
         }
@@ -863,6 +868,7 @@ const createJavaBom = async (path, options) => {
         src: path,
         filename: "build.gradle",
         nsMapping: jarNSMapping,
+        format: options.format,
       });
     }
 
@@ -896,9 +902,11 @@ const createJavaBom = async (path, options) => {
           if (result.stderr) {
             console.error(result.stdout, result.stderr);
           }
-          console.log(
-            "1. Check if bazel is installed and available in PATH.\n2. Try building your app with bazel prior to invoking cdxgen"
-          );
+          if (DEBUG_MODE) {
+            console.log(
+              "1. Check if bazel is installed and available in PATH.\n2. Try building your app with bazel prior to invoking cdxgen"
+            );
+          }
         } else {
           console.log(
             "Executing",
@@ -921,12 +929,14 @@ const createJavaBom = async (path, options) => {
             if (dlist && dlist.length) {
               pkgList = pkgList.concat(dlist);
             } else {
-              console.log(
-                "No packages were detected.\n1. Build your project using bazel build command before running cdxgen\n2. Try running the bazel aquery command manually to see if skyframe state can be retrieved."
-              );
-              console.log(
-                "If your project requires a different query, please file a bug at AppThreat/cdxgen repo!"
-              );
+              if (DEBUG_MODE) {
+                console.log(
+                  "No packages were detected.\n1. Build your project using bazel build command before running cdxgen\n2. Try running the bazel aquery command manually to see if skyframe state can be retrieved."
+                );
+                console.log(
+                  "If your project requires a different query, please file a bug at AppThreat/cdxgen repo!"
+                );
+              }
             }
           }
           pkgList = await utils.getMvnMetadata(pkgList);
@@ -934,6 +944,7 @@ const createJavaBom = async (path, options) => {
             src: path,
             filename: "BUILD",
             nsMapping: {},
+            format: options.format,
           });
         }
       }
@@ -1040,15 +1051,17 @@ const createJavaBom = async (path, options) => {
           });
           if (result.status == 1 || result.error) {
             console.error(result.stdout, result.stderr);
-            console.log(
-              `1. Check if scala and sbt is installed and available in PATH. Only scala 2.10 + sbt 0.13.6+ and 2.12 + sbt 1.0+ is supported for now.`
-            );
-            console.log(
-              `2. Check if the plugin net.virtual-void:sbt-dependency-graph 0.10.0-RC1 can be used in the environment`
-            );
-            console.log(
-              "3. Consider creating a lockfile using sbt-dependency-lock plugin. See https://github.com/stringbean/sbt-dependency-lock"
-            );
+            if (DEBUG_MODE) {
+              console.log(
+                `1. Check if scala and sbt is installed and available in PATH. Only scala 2.10 + sbt 0.13.6+ and 2.12 + sbt 1.0+ is supported for now.`
+              );
+              console.log(
+                `2. Check if the plugin net.virtual-void:sbt-dependency-graph 0.10.0-RC1 can be used in the environment`
+              );
+              console.log(
+                "3. Consider creating a lockfile using sbt-dependency-lock plugin. See https://github.com/stringbean/sbt-dependency-lock"
+              );
+            }
           } else if (DEBUG_MODE) {
             console.log(result.stdout);
           }
@@ -1090,6 +1103,7 @@ const createJavaBom = async (path, options) => {
         src: path,
         filename: sbtProjects.join(", "),
         nsMapping: jarNSMapping,
+        format: options.format,
       });
     }
   }
@@ -1119,6 +1133,7 @@ const createNodejsBom = async (path, options) => {
         allImports: {},
         src: path,
         filename: "package.json",
+        format: options.format,
       });
     }
   }
@@ -1175,6 +1190,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   } else if (pkgLockFiles && pkgLockFiles.length) {
     manifestFiles = manifestFiles.concat(pkgLockFiles);
@@ -1189,6 +1205,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   } else if (fs.existsSync(pathLib.join(path, "rush.json"))) {
     // Rush.js creates node_modules inside common/temp directory
@@ -1223,6 +1240,7 @@ const createNodejsBom = async (path, options) => {
         allImports,
         src: path,
         filename: "shrinkwrap-deps.json",
+        format: options.format,
       });
     } else if (fs.existsSync(pnpmLock)) {
       const pkgList = await utils.parsePnpmLock(pnpmLock);
@@ -1230,6 +1248,7 @@ const createNodejsBom = async (path, options) => {
         allImports,
         src: path,
         filename: "pnpm-lock.yaml",
+        format: options.format,
       });
     } else {
       console.log(
@@ -1254,6 +1273,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   } else if (fs.existsSync(pathLib.join(path, "node_modules"))) {
     const pkgJsonFiles = utils.getAllFiles(
@@ -1271,6 +1291,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   }
   // Projects containing just min files or bower
@@ -1279,6 +1300,7 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1346,6 +1368,7 @@ const createPythonBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: metadataFiles.join(", "),
+      format: options.format,
     });
   }
   // .whl files. Zip file containing dist-info directory
@@ -1362,6 +1385,7 @@ const createPythonBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: whlFiles.join(", "),
+      format: options.format,
     });
   }
   if (requirementsMode || pipenvMode || setupPyMode) {
@@ -1374,10 +1398,24 @@ const createPythonBom = async (path, options) => {
         return buildBomNSData(options, pkgList, "pypi", {
           src: path,
           filename: "Pipfile.lock",
+          format: options.format,
         });
       } else {
         console.error("Pipfile.lock not found at", path);
       }
+    } else if (poetryMode) {
+      for (let f of poetryFiles) {
+        const lockData = fs.readFileSync(f, { encoding: "utf-8" });
+        const dlist = await utils.parsePoetrylockData(lockData);
+        if (dlist && dlist.length) {
+          pkgList = pkgList.concat(dlist);
+        }
+      }
+      return buildBomNSData(options, pkgList, "pypi", {
+        src: path,
+        filename: poetryFiles.join(", "),
+        format: options.format,
+      });
     } else if (requirementsMode) {
       let metadataFilename = "requirements.txt";
       if (reqFiles && reqFiles.length) {
@@ -1403,6 +1441,7 @@ const createPythonBom = async (path, options) => {
       return buildBomNSData(options, pkgList, "pypi", {
         src: path,
         filename: metadataFilename,
+        format: options.format,
       });
     } else if (setupPyMode) {
       const setupPyData = fs.readFileSync(setupPy, { encoding: "utf-8" });
@@ -1410,6 +1449,7 @@ const createPythonBom = async (path, options) => {
       return buildBomNSData(options, pkgList, "pypi", {
         src: path,
         filename: "setup.py",
+        format: options.format,
       });
     }
   }
@@ -1447,6 +1487,7 @@ const createGoBom = async (path, options) => {
       allImports,
       src: path,
       filename: path,
+      format: options.format,
     });
   }
 
@@ -1476,6 +1517,7 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "golang", {
       src: path,
       filename: gosumFiles.join(", "),
+      format: options.format,
     });
   }
 
@@ -1574,6 +1616,7 @@ const createGoBom = async (path, options) => {
           allImports,
           src: path,
           filename: gomodFiles.join(", "),
+          format: options.format,
         });
       }
     }
@@ -1594,6 +1637,7 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "golang", {
       src: path,
       filename: gomodFiles.join(", "),
+      format: options.format,
     });
   } else if (gopkgLockFiles.length) {
     for (let f of gopkgLockFiles) {
@@ -1611,6 +1655,7 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "golang", {
       src: path,
       filename: gopkgLockFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1648,6 +1693,7 @@ const createRustBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "crates", {
       src: path,
       filename: cargoFiles.join(", "),
+      format: options.format,
     });
   }
   // Get the new lock files
@@ -1669,6 +1715,7 @@ const createRustBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "crates", {
       src: path,
       filename: cargoLockFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1909,6 +1956,7 @@ const createPHPBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "composer", {
       src: path,
       filename: composerLockFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -1966,6 +2014,7 @@ const createRubyBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "gem", {
       src: path,
       filename: gemLockFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
@@ -2077,6 +2126,7 @@ const createCsharpBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "nuget", {
       src: path,
       filename: manifestFiles.join(", "),
+      format: options.format,
     });
   }
   return {};
