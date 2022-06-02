@@ -1,3 +1,4 @@
+const parsePackageJsonName = require("parse-packagejson-name");
 const os = require("os");
 const pathLib = require("path");
 const ssri = require("ssri");
@@ -222,7 +223,7 @@ function addComponent(
   let pptype = ptype;
 
   if (!isRootPkg) {
-    let pkgIdentifier = utils.parsePackageJsonName(pkg.name);
+    let pkgIdentifier = parsePackageJsonName(pkg.name);
     let group = pkg.group || pkgIdentifier.scope || '';
     let name = pkgIdentifier.fullName || pkg.name || '';
     const version = pkg.version;
@@ -459,7 +460,7 @@ const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
     allImports = context.allImports;
   }
 
-  if (!context.format || context.format === 'JSON') {
+  if (!options.format || options.format === 'JSON') {
     const metadata = addMetadata("json");
 
     bomNSData.bomJson = {
@@ -480,7 +481,7 @@ const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
     }
   }
 
-  if (!context.format || context.format === 'XML') {
+  if (!options.format || options.format === 'XML') {
     const components = listComponents(options, allImports, pkgInfo, ptype, "xml");
     if (components?.length) {
       bomNSData.bomXml = buildBomXml(serialNum, components, context);
@@ -518,7 +519,6 @@ const createJarBom = (path, options) => {
     src: path,
     filename: jarFiles.join(", "),
     nsMapping: {},
-    format: options.format,
   });
 };
 
@@ -562,7 +562,6 @@ const createJavaBom = async (path, options) => {
       src: pathLib.dirname(path),
       filename: path,
       nsMapping: jarNSMapping,
-      format: options.format,
     });
   } else {
     // maven - pom.xml
@@ -589,7 +588,7 @@ const createJavaBom = async (path, options) => {
           );
           jarNSMapping = utils.collectMvnDependencies(MVN_CMD, basePath);
         }
-        console.log(`Executing '${MVN_CMD} ${mvnArgs.join(" ")}' in`, basePath);
+        if (DEBUG_MODE) console.log(`Executing '${MVN_CMD} ${mvnArgs.join(" ")}' in`, basePath);
         let result = spawnSync(MVN_CMD, mvnArgs, {
           cwd: basePath,
           shell: true,
@@ -601,7 +600,7 @@ const createJavaBom = async (path, options) => {
         const bomGenerated = fs.existsSync(
           pathLib.join(basePath, "target", "bom.xml")
         );
-        if (!bomGenerated || result.status == 1 || result.error) {
+        if (!bomGenerated || result.status === 1 || result.error) {
           let tempDir = fs.mkdtempSync(pathLib.join(os.tmpdir(), "cdxmvn-"));
           let tempMvnTree = pathLib.join(tempDir, "mvn-tree.txt");
           let mvnTreeArgs = ["dependency:tree", "-DoutputFile=" + tempMvnTree];
@@ -618,7 +617,7 @@ const createJavaBom = async (path, options) => {
             encoding: "utf-8",
             timeout: TIMEOUT_MS,
           });
-          if (result.status == 1 || result.error) {
+          if (result.status === 1 || result.error) {
             console.error(result.stdout, result.stderr);
             console.log(
               "Resolve the above maven error. This could be due to the following:\n"
@@ -656,7 +655,6 @@ const createJavaBom = async (path, options) => {
             src: path,
             filename: "pom.xml",
             nsMapping: jarNSMapping,
-            format: options.format,
           });
         }
       } // for
@@ -716,13 +714,13 @@ const createJavaBom = async (path, options) => {
       }
       // Support for multi-project applications
       if (process.env.GRADLE_MULTI_PROJECT_MODE) {
-        console.log("Executing", GRADLE_CMD, "projects in", path);
+        if (DEBUG_MODE) console.log("Executing", GRADLE_CMD, "projects in", path);
         const result = spawnSync(
           GRADLE_CMD,
           ["projects", "-q", "--console", "plain"],
           { cwd: path, encoding: "utf-8", timeout: TIMEOUT_MS }
         );
-        if (result.status == 1 || result.error) {
+        if (result.status === 1 || result.error) {
           console.error(result.stdout, result.stderr);
           if (DEBUG_MODE) {
             console.log(
@@ -739,7 +737,7 @@ const createJavaBom = async (path, options) => {
               "No projects found. Is this a gradle multi-project application?"
             );
           } else {
-            console.log("Found", allProjects.length, "gradle sub-projects");
+            if (DEBUG_MODE) console.log("Found", allProjects.length, "gradle sub-projects");
             for (let sp of allProjects) {
               let gradleDepArgs = [
                 sp + ":dependencies",
@@ -752,7 +750,7 @@ const createJavaBom = async (path, options) => {
                 const addArgs = process.env.GRADLE_ARGS.split(" ");
                 gradleDepArgs = gradleDepArgs.concat(addArgs);
               }
-              console.log(
+              if (DEBUG_MODE) console.log(
                 "Executing",
                 GRADLE_CMD,
                 gradleDepArgs.join(" "),
@@ -764,7 +762,7 @@ const createJavaBom = async (path, options) => {
                 encoding: "utf-8",
                 timeout: TIMEOUT_MS,
               });
-              if (sresult.status == 1 || sresult.error) {
+              if (sresult.status === 1 || sresult.error) {
                 if (DEBUG_MODE) {
                   console.error(sresult.stdout, sresult.stderr);
                 }
@@ -815,7 +813,7 @@ const createJavaBom = async (path, options) => {
         }
         for (let f of gradleFiles) {
           const basePath = pathLib.dirname(f);
-          console.log(
+          if (DEBUG_MODE) console.log(
             "Executing",
             GRADLE_CMD,
             gradleDepArgs.join(" "),
@@ -827,7 +825,7 @@ const createJavaBom = async (path, options) => {
             encoding: "utf-8",
             timeout: TIMEOUT_MS,
           });
-          if (result.status == 1 || result.error) {
+          if (result.status === 1 || result.error) {
             if (result.stderr) {
               console.error(result.stdout, result.stderr);
             }
@@ -868,7 +866,6 @@ const createJavaBom = async (path, options) => {
         src: path,
         filename: "build.gradle",
         nsMapping: jarNSMapping,
-        format: options.format,
       });
     }
 
@@ -884,7 +881,7 @@ const createJavaBom = async (path, options) => {
         const basePath = pathLib.dirname(f);
         // Invoke bazel build first
         const bazelTarget = process.env.BAZEL_TARGET || ":all";
-        console.log(
+        if (DEBUG_MODE) console.log(
           "Executing",
           BAZEL_CMD,
           "build",
@@ -898,7 +895,7 @@ const createJavaBom = async (path, options) => {
           encoding: "utf-8",
           timeout: TIMEOUT_MS,
         });
-        if (result.status == 1 || result.error) {
+        if (result.status === 1 || result.error) {
           if (result.stderr) {
             console.error(result.stdout, result.stderr);
           }
@@ -908,7 +905,7 @@ const createJavaBom = async (path, options) => {
             );
           }
         } else {
-          console.log(
+          if (DEBUG_MODE) console.log(
             "Executing",
             BAZEL_CMD,
             "aquery --output=textproto --skyframe_state in",
@@ -919,7 +916,7 @@ const createJavaBom = async (path, options) => {
             ["aquery", "--output=textproto", "--skyframe_state"],
             { cwd: basePath, encoding: "utf-8", timeout: TIMEOUT_MS }
           );
-          if (result.status == 1 || result.error) {
+          if (result.status === 1 || result.error) {
             console.error(result.stdout, result.stderr);
           }
           stdout = result.stdout;
@@ -944,7 +941,6 @@ const createJavaBom = async (path, options) => {
             src: path,
             filename: "BUILD",
             nsMapping: {},
-            format: options.format,
           });
         }
       }
@@ -1022,7 +1018,7 @@ const createJavaBom = async (path, options) => {
         for (let i in sbtProjects) {
           const basePath = sbtProjects[i];
           let dlFile = pathLib.join(tempDir, "dl-" + i + ".tmp");
-          console.log(
+          if (DEBUG_MODE) console.log(
             "Executing",
             SBT_CMD,
             "dependencyList in",
@@ -1049,7 +1045,7 @@ const createJavaBom = async (path, options) => {
             encoding: "utf-8",
             timeout: TIMEOUT_MS,
           });
-          if (result.status == 1 || result.error) {
+          if (result.status === 1 || result.error) {
             console.error(result.stdout, result.stderr);
             if (DEBUG_MODE) {
               console.log(
@@ -1103,7 +1099,6 @@ const createJavaBom = async (path, options) => {
         src: path,
         filename: sbtProjects.join(", "),
         nsMapping: jarNSMapping,
-        format: options.format,
       });
     }
   }
@@ -1133,7 +1128,6 @@ const createNodejsBom = async (path, options) => {
         allImports: {},
         src: path,
         filename: "package.json",
-        format: options.format,
       });
     }
   }
@@ -1190,7 +1184,6 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
-      format: options.format,
     });
   } else if (pkgLockFiles && pkgLockFiles.length) {
     manifestFiles = manifestFiles.concat(pkgLockFiles);
@@ -1205,14 +1198,13 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
-      format: options.format,
     });
   } else if (fs.existsSync(pathLib.join(path, "rush.json"))) {
     // Rush.js creates node_modules inside common/temp directory
     const nmDir = pathLib.join(path, "common", "temp", "node_modules");
     // Do rush install if we don't have node_modules directory
     if (!fs.existsSync(nmDir)) {
-      console.log("Executing 'rush install --no-link'", path);
+      if (DEBUG_MODE) console.log("Executing 'rush install --no-link'", path);
       spawnSync("rush", ["install", "--no-link", "--bypass-policy"], {
         cwd: path,
         encoding: "utf-8",
@@ -1240,7 +1232,6 @@ const createNodejsBom = async (path, options) => {
         allImports,
         src: path,
         filename: "shrinkwrap-deps.json",
-        format: options.format,
       });
     } else if (fs.existsSync(pnpmLock)) {
       const pkgList = await utils.parsePnpmLock(pnpmLock);
@@ -1248,7 +1239,6 @@ const createNodejsBom = async (path, options) => {
         allImports,
         src: path,
         filename: "pnpm-lock.yaml",
-        format: options.format,
       });
     } else {
       console.log(
@@ -1273,7 +1263,6 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
-      format: options.format,
     });
   } else if (fs.existsSync(pathLib.join(path, "node_modules"))) {
     const pkgJsonFiles = utils.getAllFiles(
@@ -1291,7 +1280,6 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
-      format: options.format,
     });
   }
   // Projects containing just min files or bower
@@ -1300,7 +1288,6 @@ const createNodejsBom = async (path, options) => {
       allImports,
       src: path,
       filename: manifestFiles.join(", "),
-      format: options.format,
     });
   }
   return {};
@@ -1368,7 +1355,6 @@ const createPythonBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: metadataFiles.join(", "),
-      format: options.format,
     });
   }
   // .whl files. Zip file containing dist-info directory
@@ -1385,7 +1371,6 @@ const createPythonBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: whlFiles.join(", "),
-      format: options.format,
     });
   }
   if (requirementsMode || pipenvMode || setupPyMode) {
@@ -1398,24 +1383,10 @@ const createPythonBom = async (path, options) => {
         return buildBomNSData(options, pkgList, "pypi", {
           src: path,
           filename: "Pipfile.lock",
-          format: options.format,
         });
       } else {
         console.error("Pipfile.lock not found at", path);
       }
-    } else if (poetryMode) {
-      for (let f of poetryFiles) {
-        const lockData = fs.readFileSync(f, { encoding: "utf-8" });
-        const dlist = await utils.parsePoetrylockData(lockData);
-        if (dlist && dlist.length) {
-          pkgList = pkgList.concat(dlist);
-        }
-      }
-      return buildBomNSData(options, pkgList, "pypi", {
-        src: path,
-        filename: poetryFiles.join(", "),
-        format: options.format,
-      });
     } else if (requirementsMode) {
       let metadataFilename = "requirements.txt";
       if (reqFiles && reqFiles.length) {
@@ -1441,7 +1412,6 @@ const createPythonBom = async (path, options) => {
       return buildBomNSData(options, pkgList, "pypi", {
         src: path,
         filename: metadataFilename,
-        format: options.format,
       });
     } else if (setupPyMode) {
       const setupPyData = fs.readFileSync(setupPy, { encoding: "utf-8" });
@@ -1449,7 +1419,6 @@ const createPythonBom = async (path, options) => {
       return buildBomNSData(options, pkgList, "pypi", {
         src: path,
         filename: "setup.py",
-        format: options.format,
       });
     }
   }
@@ -1487,7 +1456,6 @@ const createGoBom = async (path, options) => {
       allImports,
       src: path,
       filename: path,
-      format: options.format,
     });
   }
 
@@ -1498,7 +1466,7 @@ const createGoBom = async (path, options) => {
   );
 
   // If USE_GOSUM is true, generate BOM components only using go.sum.
-  const useGosum = process.env.USE_GOSUM == "true";
+  const useGosum = process.env.USE_GOSUM === "true";
   if (useGosum && gosumFiles.length) {
     console.warn(
       "Using go.sum to generate BOMs for go projects may return an inaccurate representation of transitive dependencies.\nSee: https://github.com/golang/go/wiki/Modules#is-gosum-a-lock-file-why-does-gosum-include-information-for-module-versions-i-am-no-longer-using\n",
@@ -1517,7 +1485,6 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "golang", {
       src: path,
       filename: gosumFiles.join(", "),
-      format: options.format,
     });
   }
 
@@ -1552,7 +1519,7 @@ const createGoBom = async (path, options) => {
   if (gomodFiles.length) {
     // Use the go list -deps and go mod why commands to generate a good quality BoM for non-docker invocations
     if (options.projectType !== "docker") {
-      console.log("Executing go list -deps in", path);
+      if (DEBUG_MODE) console.log("Executing go list -deps in", path);
       const result = spawnSync(
         "go",
         [
@@ -1564,7 +1531,7 @@ const createGoBom = async (path, options) => {
         ],
         { cwd: path, encoding: "utf-8", timeout: TIMEOUT_MS }
       );
-      if (result.status == 1 || result.error) {
+      if (result.status === 1 || result.error) {
         console.error(result.stdout, result.stderr);
       }
       const stdout = result.stdout;
@@ -1593,7 +1560,7 @@ const createGoBom = async (path, options) => {
             ["mod", "why", "-m", "-vendor", pkgFullName],
             { cwd: path, encoding: "utf-8", timeout: TIMEOUT_MS }
           );
-          if (mresult.status == 1 || mresult.error) {
+          if (mresult.status === 1 || mresult.error) {
             if (DEBUG_MODE) {
               console.log(mresult.stdout, mresult.stderr);
             }
@@ -1603,7 +1570,7 @@ const createGoBom = async (path, options) => {
             if (mstdout) {
               const cmdOutput = Buffer.from(mstdout).toString();
               let whyPkg = utils.parseGoModWhy(cmdOutput);
-              if (whyPkg == pkgFullName) {
+              if (whyPkg === pkgFullName) {
                 allImports[pkgFullName] = true;
               }
             }
@@ -1616,7 +1583,6 @@ const createGoBom = async (path, options) => {
           allImports,
           src: path,
           filename: gomodFiles.join(", "),
-          format: options.format,
         });
       }
     }
@@ -1637,7 +1603,6 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "golang", {
       src: path,
       filename: gomodFiles.join(", "),
-      format: options.format,
     });
   } else if (gopkgLockFiles.length) {
     for (let f of gopkgLockFiles) {
@@ -1655,7 +1620,6 @@ const createGoBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "golang", {
       src: path,
       filename: gopkgLockFiles.join(", "),
-      format: options.format,
     });
   }
   return {};
@@ -1693,7 +1657,6 @@ const createRustBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "crates", {
       src: path,
       filename: cargoFiles.join(", "),
-      format: options.format,
     });
   }
   // Get the new lock files
@@ -1715,7 +1678,6 @@ const createRustBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "crates", {
       src: path,
       filename: cargoLockFiles.join(", "),
-      format: options.format,
     });
   }
   return {};
@@ -1923,10 +1885,10 @@ const createPHPBom = async (path, options) => {
       const basePath = pathLib.dirname(f);
       let args = [];
       if (composerVersion > 1) {
-        console.log("Generating composer.lock in", basePath);
+        if (DEBUG_MODE) console.log("Generating composer.lock in", basePath);
         args = ["update", "--no-install", "--ignore-platform-reqs"];
       } else {
-        console.log("Executing 'composer install' in", basePath);
+        if (DEBUG_MODE) console.log("Executing 'composer install' in", basePath);
         args = ["install", "--ignore-platform-reqs"];
       }
       const result = spawnSync("composer", args, {
@@ -1956,7 +1918,6 @@ const createPHPBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "composer", {
       src: path,
       filename: composerLockFiles.join(", "),
-      format: options.format,
     });
   }
   return {};
@@ -1983,12 +1944,12 @@ const createRubyBom = async (path, options) => {
   if (gemFileMode && !gemLockMode && options.installDeps) {
     for (let f of gemFiles) {
       const basePath = pathLib.dirname(f);
-      console.log("Executing 'bundle install' in", basePath);
+      if (DEBUG_MODE) console.log("Executing 'bundle install' in", basePath);
       const result = spawnSync("bundle", ["install"], {
         cwd: basePath,
         encoding: "utf-8",
       });
-      if (result.status == 1 || result.error) {
+      if (result.status === 1 || result.error) {
         console.error(
           "Bundle install has failed. Check if bundle is installed and available in PATH."
         );
@@ -2014,7 +1975,6 @@ const createRubyBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "gem", {
       src: path,
       filename: gemLockFiles.join(", "),
-      format: options.format,
     });
   }
   return {};
@@ -2126,7 +2086,6 @@ const createCsharpBom = async (path, options) => {
     return buildBomNSData(options, pkgList, "nuget", {
       src: path,
       filename: manifestFiles.join(", "),
-      format: options.format,
     });
   }
   return {};
@@ -2279,7 +2238,7 @@ const createMultiXBom = async (pathList, options) => {
     }
   }
   components = trimComponents(components);
-  console.log(`BOM includes ${components.length} components`);
+  if (DEBUG_MODE) console.log(`BOM includes ${components.length} components`);
   const serialNum = "urn:uuid:" + uuidv4();
   return {
     bomXml: buildBomXml(

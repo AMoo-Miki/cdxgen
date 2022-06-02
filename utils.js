@@ -1,6 +1,7 @@
 const glob = require("glob");
 const os = require("os");
 const path = require("path");
+const parsePackageJsonName = require("parse-packagejson-name");
 const fs = require("fs");
 const got = require("got");
 const convert = require("xml-js");
@@ -24,27 +25,6 @@ const DEBUG_MODE =
 let metadata_cache = {};
 
 const MAX_LICENSE_ID_LENGTH = 100;
-
-const nameRegExp = /^(?:(@[^/]+)\/)?(([^.]+)(?:\.(.*))?)$/;
-
-const parsePackageJsonName = (name) => {
-  const returnObject = {
-    scope: null,
-    fullName: '',
-    projectName: '',
-    moduleName: '',
-  };
-  const match = (typeof name === 'object' ? (name.name || '') : name || '').match(nameRegExp);
-  if (match) {
-    returnObject.scope = match[1] || null;
-    returnObject.fullName = match[2] || match[0];
-    returnObject.projectName = match[3] === match[2] ? null : match[3];
-    returnObject.moduleName = match[4] || match[2] || null;
-  }
-  return returnObject;
-};
-exports.parsePackageJsonName = parsePackageJsonName;
-
 
 /**
  * Method to get files matching a pattern
@@ -684,7 +664,7 @@ const parsePom = function (pomFile) {
     for (let adep of dependencies) {
       const version = adep.version;
       let versionStr = undefined;
-      if (version && version._ && version._.indexOf("$") == -1) {
+      if (version && version._ && version._.indexOf("$") === -1) {
         versionStr = version._;
         deps.push({
           group: adep.groupId ? adep.groupId._ : "",
@@ -717,7 +697,7 @@ const parseMavenTree = function (rawOutput) {
       const pkgArr = l.split(":");
       if (pkgArr && pkgArr.length > 2) {
         let versionStr = pkgArr[pkgArr.length - 2];
-        if (pkgArr.length == 4) {
+        if (pkgArr.length === 4) {
           versionStr = pkgArr[pkgArr.length - 1];
         }
         const key = pkgArr[0] + "-" + pkgArr[1] + "-" + versionStr;
@@ -1058,7 +1038,7 @@ const parsePyRequiresDist = function (dist_string) {
   let version = "";
   if (!tmpA) {
     return undefined;
-  } else if (tmpA.length == 1) {
+  } else if (tmpA.length === 1) {
     name = tmpA[0];
   } else if (tmpA.length > 1) {
     name = tmpA[0];
@@ -1734,7 +1714,7 @@ const parseGoVersionData = async function (buildInfoData) {
       group = name;
     }
     let hash = "";
-    if (tmpA.length == 4) {
+    if (tmpA.length === 4) {
       hash = tmpA[tmpA.length - 1].replace("h1:", "sha256-");
     }
     let component = await getGoPkgComponent(group, name, tmpA[2].trim(), hash);
@@ -1850,7 +1830,7 @@ const parseGemfileLockData = async function (gemLockData) {
     l = l.trim();
     if (specsFound) {
       const tmpA = l.split(" ");
-      if (tmpA && tmpA.length == 2) {
+      if (tmpA && tmpA.length === 2) {
         const name = tmpA[0];
         if (!pkgnames[name]) {
           let version = tmpA[1].split(", ")[0];
@@ -2022,7 +2002,7 @@ const parseCargoTomlData = async function (cargoData) {
           name = tmpA[0];
           version = tmpB[1].split(",")[0];
         }
-      } else if (l.indexOf("path =") == -1 && tmpA.length > 1) {
+      } else if (l.indexOf("path =") === -1 && tmpA.length > 1) {
         name = tmpA[0];
         version = tmpA[1];
       }
@@ -2298,7 +2278,7 @@ const parseCsPkgData = async function (pkgData) {
     attributesKey: "$",
     commentKey: "value",
   }).packages;
-  if (packages.length == 0) {
+  if (packages.length === 0) {
     return pkgList;
   }
   packages = packages[0].package;
@@ -2330,7 +2310,7 @@ const parseCsProjData = async function (csProjData) {
     attributesKey: "$",
     commentKey: "value",
   }).Project;
-  if (projects.length == 0) {
+  if (projects.length === 0) {
     return pkgList;
   }
   const project = projects[0];
@@ -2601,7 +2581,7 @@ exports.parseSbtLock = parseSbtLock;
  */
 const collectMvnDependencies = function (mavenCmd, basePath) {
   let tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mvn-deps-"));
-  console.log(
+  if (DEBUG_MODE) console.log(
     `Executing 'mvn dependency:copy-dependencies -DoutputDirectory=${tempDir} -DexcludeTransitive=true -DincludeScope=runtime' in ${basePath}`
   );
   const result = spawnSync(
