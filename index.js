@@ -1358,7 +1358,10 @@ const createPythonBom = async (path, options) => {
       let metadataFilename = "requirements.txt";
       if (reqFiles && reqFiles.length) {
         for (let f of reqFiles) {
-          const reqData = fs.readFileSync(f, { encoding: "utf-8" });
+          const { stdout: reqData } = spawnSync("python", ["-m", "pip", "freeze"], {
+            encoding: "utf-8",
+            cwd: pathLib.dirname(f)
+          });
           const dlist = await utils.parseReqFile(reqData);
           if (dlist && dlist.length) {
             pkgList = pkgList.concat(dlist);
@@ -1366,8 +1369,7 @@ const createPythonBom = async (path, options) => {
         }
         metadataFilename = reqFiles.join(", ");
       } else if (reqDirFiles && reqDirFiles.length) {
-        for (let j in reqDirFiles) {
-          const f = reqDirFiles[j];
+        for (let f of reqDirFiles) {
           const reqData = fs.readFileSync(f, { encoding: "utf-8" });
           const dlist = await utils.parseReqFile(reqData);
           if (dlist && dlist.length) {
