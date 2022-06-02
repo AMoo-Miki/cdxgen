@@ -98,13 +98,14 @@ let filePath = args._[0] || ".";
  * Method to start the bom creation process
  */
 (async () => {
-  const bomNSData = (await bom.createBom(filePath, options)) || {};
+  const filePathResolved = path.resolve(filePath);
+  const bomNSData = (await bom.createBom(filePathResolved, options)) || {};
 
   if (!args.projectName) {
     if (filePath !== ".") {
       args.projectName = path.basename(filePath);
     } else {
-      args.projectName = path.basename(path.resolve(filePath));
+      args.projectName = path.basename(filePathResolved);
     }
   }
   if (args.output) {

@@ -15,9 +15,10 @@ const { spawnSync } = require("child_process");
 const propertiesReader = require("properties-reader");
 const semver = require("semver");
 const StreamZip = require("node-stream-zip");
+const pathLib = require("path");
 
 // Debug mode flag
-const DEBUG_MODE =
+const DEBUG_MODE = true ||
   process.env.SCAN_DEBUG_MODE === "debug" ||
   process.env.SHIFTLEFT_LOGGING_LEVEL === "debug";
 
@@ -204,6 +205,9 @@ const getNpmMetadata = async function (pkgList) {
       if (metadata_cache[key]) {
         body = metadata_cache[key];
       } else {
+        if (DEBUG_MODE) {
+          console.log(`Querying ${NPM_URL + key}`);
+        }
         const res = await got.get(NPM_URL + key, {
           responseType: "json",
         });
@@ -1075,39 +1079,46 @@ const getPyMetadata = async function (pkgList, fetchIndirectDeps) {
       if (p.name.includes("[")) {
         p.name = p.name.split("[")[0];
       }
-      const res = await got.get(PYPI_URL + p.name + "/json", {
-        responseType: "json",
-      });
-      const body = res.body;
-      p.description = body.info.summary;
-      p.license = findLicenseId(body.info.license);
-      if (body.info.home_page.indexOf("git") > -1) {
-        p.repository = { url: body.info.home_page };
-      } else {
-        p.homepage = { url: body.info.home_page };
+      if (DEBUG_MODE) {
+        console.log(`Querying ${PYPI_URL + p.name + '/json'}`);
       }
-      // Use the latest version if none specified
-      if (
-        !p.version ||
-        p.version.includes("*") ||
-        p.version.includes("<") ||
-        p.version.includes(">")
-      ) {
-        p.version = body.info.version;
-      }
-      const requires_dist = body.info.requires_dist;
-      if (requires_dist && requires_dist.length) {
-        indirectDeps = indirectDeps.concat(
-          requires_dist.map(parsePyRequiresDist)
-        );
-      }
-      if (body.releases && body.releases[p.version]) {
-        const digest = body.releases[p.version][0].digests;
-        if (digest["sha256"]) {
-          p._integrity = "sha256-" + digest["sha256"];
-        } else if (digest["md5"]) {
-          p._integrity = "md5-" + digest["md5"];
+      try {
+        const res = await got.get(PYPI_URL + p.name + "/json", {
+          responseType: "json",
+        });
+        const body = res.body;
+        p.description = body.info.summary;
+        p.license = findLicenseId(body.info.license);
+        if (body.info.home_page.indexOf("git") > -1) {
+          p.repository = { url: body.info.home_page };
+        } else {
+          p.homepage = { url: body.info.home_page };
         }
+        // Use the latest version if none specified
+        if (
+            !p.version ||
+            p.version.includes("*") ||
+            p.version.includes("<") ||
+            p.version.includes(">")
+        ) {
+          p.version = body.info.version;
+        }
+        const requires_dist = body.info.requires_dist;
+        if (requires_dist && requires_dist.length) {
+          indirectDeps = indirectDeps.concat(
+              requires_dist.map(parsePyRequiresDist)
+          );
+        }
+        if (body.releases && body.releases[p.version]) {
+          const digest = body.releases[p.version][0].digests;
+          if (digest["sha256"]) {
+            p._integrity = "sha256-" + digest["sha256"];
+          } else if (digest["md5"]) {
+            p._integrity = "md5-" + digest["md5"];
+          }
+        }
+      } catch (ex) {
+        console.error(`Failed to check ${PYPI_URL + p.name + '/json'}`);
       }
       cdepList.push(p);
     } catch (err) {
@@ -1226,12 +1237,14 @@ const parseReqFile = async function (reqData) {
   const pkgList = [];
   let fetchIndirectDeps = false;
   reqData.split("\n").forEach((l) => {
+    console.log('::::', l);
     if (!l.startsWith("#")) {
       if (l.indexOf("=") > -1) {
         let tmpA = l.split(/(==|<=|~=|>=)/);
         if (tmpA.includes("#")) {
           tmpA = tmpA.split("#")[0];
         }
+
         let versionStr = tmpA[tmpA.length - 1].trim().replace("*", "0");
         if (versionStr.indexOf(" ") > -1) {
           versionStr = versionStr.split(" ")[0];
@@ -1245,8 +1258,8 @@ const parseReqFile = async function (reqData) {
             version: versionStr,
           });
         }
-      } else if (/[>|\[|@]/.test(l)) {
-        let tmpA = l.split(/(>|\[|@)/);
+      } else if (/[>|\[@]/.test(l)) {
+        let tmpA = l.split(/[>\[@]/);
         if (tmpA.includes("#")) {
           tmpA = tmpA.split("#")[0];
         }
@@ -1255,9 +1268,7 @@ const parseReqFile = async function (reqData) {
           version: null,
         });
       } else if (l) {
-        if (l.includes("#")) {
-          l = l.split("#")[0];
-        }
+        l = l.replace(/[#;].*$/, '');
         pkgList.push({
           name: l.trim(),
           version: null,
@@ -1275,6 +1286,7 @@ exports.parseReqFile = parseReqFile;
  * @param {Object} setupPyData Contents of setup.py
  */
 const parseSetupPyFile = async function (setupPyData) {
+  console.log('setupPyData', setupPyData);
   let lines = [];
   let requires_found = false;
   let should_break = false;
@@ -1291,9 +1303,10 @@ const parseSetupPyFile = async function (setupPyData) {
       }
       let tmpA = l.replace(/['\"]/g, "").split(",");
       tmpA = tmpA.filter((v) => v.length);
-      lines = lines.concat(tmpA);
+      lines.push(tmpA);
     }
   });
+  console.log(lines);
   return await parseReqFile(lines.join("\n"));
 };
 exports.parseSetupPyFile = parseSetupPyFile;
@@ -1341,6 +1354,9 @@ const getRepoLicense = async function (repoUrl, repoMetadata) {
       headers["Authorization"] = "Bearer " + process.env.GITHUB_TOKEN;
     }
     try {
+      if (DEBUG_MODE) {
+        console.log(`Querying ${apiUrl}`);
+      }
       const res = await got.get(apiUrl, {
         responseType: "json",
         headers: headers,
@@ -1408,6 +1424,9 @@ const getGoPkgLicense = async function (repoMetadata) {
     return metadata_cache[pkgUrlPrefix];
   }
   try {
+    if (DEBUG_MODE) {
+      console.log(`Querying ${pkgUrlPrefix}`);
+    }
     const res = await got.get(pkgUrlPrefix);
     if (res && res.body) {
       const $ = cheerio.load(res.body);
@@ -2993,3 +3012,63 @@ const readZipEntry = async function (zipFile, filePattern) {
   return retData;
 };
 exports.readZipEntry = readZipEntry;
+
+let CMD_PYTHON;
+/**
+ * Looks for a good installation of python
+ */
+const findPython = () => {
+  if (CMD_PYTHON) return CMD_PYTHON;
+  let output;
+
+  try {
+    output = executeCmd('python3', ['-m', 'pip', '--version']);
+    console.log('Using python3:', output);
+    return CMD_PYTHON = 'python3';
+  } catch (ex) {}
+
+  try {
+    output = executeCmd('python', ['-m', 'pip', '--version']);
+    console.log('Using python:', output);
+    return CMD_PYTHON = 'python';
+  } catch (ex) {}
+
+  throw 'NOT_FOUND_PYTHON';
+};
+
+/**
+ * Method to execute a python command
+ *
+ * @param {Array} args Command arguments
+ * @param {string} [cwd] Working directory
+ */
+const executePython = (args, cwd) => {
+  findPython();
+  return executeCmd(CMD_PYTHON, args, cwd);
+}
+exports.executePython = executePython;
+
+/**
+ * Method to execute a command
+ *
+ * @param {string} cmd Command to execute
+ * @param {Array} args Command arguments
+ * @param {string} [cwd] Working directory
+ */
+const executeCmd = (cmd, args, cwd) => {
+  if (DEBUG_MODE) console.log(`Executing "${cmd} ${args.join(' ')}"`, cwd ? `in "${cwd}"...` : '...');
+  const { stdout, stderr, status, error } = spawnSync(cmd, args, { encoding: 'utf-8', cwd });
+
+  console.log('stdout', stdout);
+  console.log('stderr', stderr);
+  console.error('------------------');
+
+  if (status !== 0 || error) {
+    console.error(`Command failed: "${cmd} ${args.join(' ')}" in "${cwd}"...`);
+    if (DEBUG_MODE) console.log('Error:', stderr);
+    throw error || 'NON_ZERO_CMD_STATUS';
+  }
+
+  return stdout.toString();
+}
+exports.executeCmd = executeCmd;

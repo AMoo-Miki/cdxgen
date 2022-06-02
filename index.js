@@ -13,6 +13,7 @@ const { findJSImports } = require("./analyzer");
 const semver = require("semver");
 const dockerLib = require("./docker");
 const binaryLib = require("./binary");
+const { executeCmd, executePython } = require("./utils");
 
 // Construct maven command
 let MVN_CMD = "mvn";
@@ -826,7 +827,7 @@ const createJavaBom = async (path, options) => {
             GRADLE_CMD_LOCAL = pathLib.resolve(pathLib.join(basePath, "gradlew"));
           }
 
-          if (DEBUG_MODE || 1) {
+          if (DEBUG_MODE) {
             console.log(
               "Executing",
               GRADLE_CMD_LOCAL || GRADLE_CMD,
@@ -844,7 +845,6 @@ const createJavaBom = async (path, options) => {
             if (result.stderr) {
               console.error(result.stdout, result.stderr);
             }
-            console.log('f', f);
             if (DEBUG_MODE || !result.stderr) {
               console.log(
                 "1. Check if the correct version of java and gradle are installed and available in PATH. For example, some project might require Java 11 with gradle 7."
@@ -1317,127 +1317,122 @@ const createNodejsBom = async (path, options) => {
  */
 const createPythonBom = async (path, options) => {
   let pkgList = [];
-  const pipenvMode = fs.existsSync(pathLib.join(path, "Pipfile"));
-  const poetryFiles = utils.getAllFiles(
-    path,
-    (options.multiProject ? "**/" : "") + "poetry.lock"
-  );
-  const reqFiles = utils.getAllFiles(
-    path,
-    (options.multiProject ? "**/" : "") + "requirements.txt"
-  );
-  const reqDirFiles = utils.getAllFiles(
-    path,
-    (options.multiProject ? "**/" : "") + "requirements/*.txt"
-  );
-  const metadataFiles = utils.getAllFiles(
-    path,
-    (options.multiProject ? "**/site-packages/**/" : "") + "METADATA"
-  );
-  const whlFiles = utils.getAllFiles(
-    path,
-    (options.multiProject ? "**/" : "") + "*.whl"
-  );
-  const setupPy = pathLib.join(path, "setup.py");
-  const requirementsMode =
-    (reqFiles && reqFiles.length) || (reqDirFiles && reqDirFiles.length);
-  const poetryMode = poetryFiles && poetryFiles.length;
-  const setupPyMode = fs.existsSync(setupPy);
+
   // Poetry sets up its own virtual env containing site-packages so
   // we give preference to poetry lock file. Issue# 129
-  if (poetryMode) {
+  const poetryFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "poetry.lock");
+  if (poetryFiles?.length) {
     for (let f of poetryFiles) {
       const lockData = fs.readFileSync(f, { encoding: "utf-8" });
       const dlist = await utils.parsePoetrylockData(lockData);
-      if (dlist && dlist.length) {
-        pkgList = pkgList.concat(dlist);
-      }
+      if (dlist?.length) pkgList.push(...dlist);
     }
+
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: poetryFiles.join(", "),
     });
-  } else if (metadataFiles && metadataFiles.length) {
+  }
+
+  const metadataFiles = utils.getAllFiles(path, (options.multiProject ? "**/site-packages/**/" : "") + "METADATA");
+  if (metadataFiles?.length) {
     // dist-info directories
     for (let mf of metadataFiles) {
-      const mData = fs.readFileSync(mf, {
-        encoding: "utf-8",
-      });
+      const mData = fs.readFileSync(mf, { encoding: "utf-8", });
       const dlist = utils.parseBdistMetadata(mData);
-      if (dlist && dlist.length) {
-        pkgList = pkgList.concat(dlist);
-      }
+      if (dlist?.length) pkgList.push(...dlist);
     }
+
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: metadataFiles.join(", "),
     });
   }
+
   // .whl files. Zip file containing dist-info directory
-  if (whlFiles && whlFiles.length) {
+  const whlFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "*.whl");
+  if (whlFiles?.length) {
     for (let wf of whlFiles) {
       const mData = await utils.readZipEntry(wf, "METADATA");
       if (mData) {
         const dlist = utils.parseBdistMetadata(mData);
-        if (dlist && dlist.length) {
-          pkgList = pkgList.concat(dlist);
-        }
+        if (dlist?.length) pkgList.push(...dlist);
       }
     }
+
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: whlFiles.join(", "),
     });
   }
-  if (requirementsMode || pipenvMode || setupPyMode) {
-    if (pipenvMode) {
-      spawnSync("pipenv", ["install"], { cwd: path, encoding: "utf-8" });
-      const piplockFile = pathLib.join(path, "Pipfile.lock");
-      if (fs.existsSync(piplockFile)) {
-        const lockData = JSON.parse(fs.readFileSync(piplockFile));
-        pkgList = await utils.parsePiplockData(lockData);
-        return buildBomNSData(options, pkgList, "pypi", {
-          src: path,
-          filename: "Pipfile.lock",
-        });
-      } else {
-        console.error("Pipfile.lock not found at", path);
-      }
-    } else if (requirementsMode) {
-      let metadataFilename = "requirements.txt";
-      if (reqFiles && reqFiles.length) {
-        for (let f of reqFiles) {
-          const reqData = fs.readFileSync(f, { encoding: "utf-8" });
-          const dlist = await utils.parseReqFile(reqData);
-          if (dlist && dlist.length) {
-            pkgList = pkgList.concat(dlist);
-          }
-        }
-        metadataFilename = reqFiles.join(", ");
-      } else if (reqDirFiles && reqDirFiles.length) {
-        for (let j in reqDirFiles) {
-          const f = reqDirFiles[j];
-          const reqData = fs.readFileSync(f, { encoding: "utf-8" });
-          const dlist = await utils.parseReqFile(reqData);
-          if (dlist && dlist.length) {
-            pkgList = pkgList.concat(dlist);
-          }
-        }
-        metadataFilename = reqDirFiles.join(", ");
-      }
+
+  const pipenvMode = fs.existsSync(pathLib.join(path, "Pipfile"));
+  if (pipenvMode) {
+    executeCmd('pipenv', ['install'], path);
+
+    const piplockFile = pathLib.join(path, "Pipfile.lock");
+    if (fs.existsSync(piplockFile)) {
+      const lockData = JSON.parse(fs.readFileSync(piplockFile).toString());
+      pkgList = await utils.parsePiplockData(lockData);
       return buildBomNSData(options, pkgList, "pypi", {
         src: path,
-        filename: metadataFilename,
+        filename: "Pipfile.lock",
       });
-    } else if (setupPyMode) {
-      const setupPyData = fs.readFileSync(setupPy, { encoding: "utf-8" });
-      pkgList = await utils.parseSetupPyFile(setupPyData);
-      return buildBomNSData(options, pkgList, "pypi", {
-        src: path,
-        filename: "setup.py",
-      });
+    } else {
+      console.error("Pipfile.lock not found at", path);
     }
   }
+
+  const
+      reqFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "requirements.txt"),
+      reqDirFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "requirements/*.txt");
+  if (reqFiles?.length || reqDirFiles?.length) {
+    let metadataFilename = "requirements.txt";
+
+    if (reqFiles?.length) {
+      for (let f of reqFiles) {
+        const reqData = executePython(['-m', 'pip', 'freeze'], pathLib.dirname(f));
+        const dlist = await utils.parseReqFile(reqData);
+        if (dlist?.length) pkgList.push(...dlist);
+      }
+
+      metadataFilename = reqFiles.join(", ");
+    }
+
+    if (reqDirFiles && reqDirFiles.length) {
+      for (let f of reqDirFiles) {
+        const reqData = fs.readFileSync(f, { encoding: "utf-8" });
+        const dlist = await utils.parseReqFile(reqData);
+        if (dlist?.length) pkgList.push(...dlist);
+      }
+      metadataFilename = reqDirFiles.join(", ");
+    }
+
+    return buildBomNSData(options, pkgList, "pypi", {
+      src: path,
+      filename: metadataFilename,
+    });
+  }
+
+  const setupPy = pathLib.join(path, "setup.py");
+  const setupPyMode = fs.existsSync(setupPy);
+  if (setupPyMode) {
+    /* */
+    executePython(['setup.py', 'install'], pathLib.dirname(setupPy));
+
+    const reqData = executePython(['-m', 'pip', 'freeze'], pathLib.dirname(setupPy));
+    const pkgList = await utils.parseReqFile(reqData);
+
+     /*/
+    const setupPyData = fs.readFileSync(setupPy, { encoding: "utf-8" });
+    pkgList = await utils.parseSetupPyFile(setupPyData);
+    /* */
+    return buildBomNSData(options, pkgList, "pypi", {
+      src: path,
+      filename: "setup.py",
+    });
+  }
+
   return {};
 };
 
