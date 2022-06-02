@@ -212,9 +212,7 @@ const getImage = async (fullName) => {
       console.log(localData);
     }
   } catch (err) {
-    console.log(
-      `Trying to pull the image ${fullName} from registry. This might take a while ...`
-    );
+    console.log(`Trying to pull the image ${fullName} from registry. This might take a while ...`);
     // If the data is not available locally
     try {
       const pullData = await makeRequest(
@@ -292,9 +290,7 @@ const exportArchive = async (fullName) => {
     // podman use blobs dir
     if (fs.existsSync(blobsDir)) {
       if (DEBUG_MODE) {
-        console.log(
-          `Image archive ${fullName} successfully exported to directory ${tempDir}`
-        );
+        console.log(`Image archive ${fullName} successfully exported to directory ${tempDir}`);
       }
       const allBlobs = getDirs(blobsDir, "*", false);
       for (let ablob of allBlobs) {

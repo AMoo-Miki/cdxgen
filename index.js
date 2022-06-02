@@ -713,7 +713,7 @@ const createJavaBom = async (path, options) => {
         GRADLE_CMD = pathLib.resolve(pathLib.join(path, "gradlew"));
       }
       // Support for multi-project applications
-      if (process.env.GRADLE_MULTI_PROJECT_MODE) {
+      if (options.gradleMultiMode) {
         if (DEBUG_MODE) console.log("Executing", GRADLE_CMD, "projects in", path);
         const result = spawnSync(
           GRADLE_CMD,
@@ -788,16 +788,18 @@ const createJavaBom = async (path, options) => {
                 }
               }
             }
-            if (pkgList.length) {
-              console.log(
-                "Obtained",
-                pkgList.length,
-                "from this gradle multi-project"
-              );
-            } else {
-              console.log(
-                "No packages found. Unset the environment variable GRADLE_MULTI_PROJECT_MODE and try again."
-              );
+            if (DEBUG_MODE) {
+              if (pkgList.length) {
+                console.log(
+                    "Obtained",
+                    pkgList.length,
+                    "from this gradle multi-project"
+                );
+              } else {
+                console.log(
+                    "No packages found. Unset the environment variable GRADLE_MULTI_PROJECT_MODE and try again."
+                );
+              }
             }
           }
         }
@@ -813,14 +815,27 @@ const createJavaBom = async (path, options) => {
         }
         for (let f of gradleFiles) {
           const basePath = pathLib.dirname(f);
-          if (DEBUG_MODE) console.log(
-            "Executing",
-            GRADLE_CMD,
-            gradleDepArgs.join(" "),
-            "in",
-            basePath
-          );
-          const result = spawnSync(GRADLE_CMD, gradleDepArgs, {
+
+          let GRADLE_CMD_LOCAL;
+          if (fs.existsSync(pathLib.join(basePath, "gradlew"))) {
+            // Use local gradle wrapper if available
+            // Enable execute permission
+            try {
+              fs.chmodSync(pathLib.join(basePath, "gradlew"), 0o775);
+            } catch (e) {}
+            GRADLE_CMD_LOCAL = pathLib.resolve(pathLib.join(basePath, "gradlew"));
+          }
+
+          if (DEBUG_MODE) {
+            console.log(
+              "Executing",
+              GRADLE_CMD_LOCAL || GRADLE_CMD,
+              gradleDepArgs.join(" "),
+              "in",
+              basePath
+            );
+          }
+          const result = spawnSync(GRADLE_CMD_LOCAL || GRADLE_CMD, gradleDepArgs, {
             cwd: basePath,
             encoding: "utf-8",
             timeout: TIMEOUT_MS,
@@ -829,6 +844,7 @@ const createJavaBom = async (path, options) => {
             if (result.stderr) {
               console.error(result.stdout, result.stderr);
             }
+            console.log('f', f);
             if (DEBUG_MODE || !result.stderr) {
               console.log(
                 "1. Check if the correct version of java and gradle are installed and available in PATH. For example, some project might require Java 11 with gradle 7."

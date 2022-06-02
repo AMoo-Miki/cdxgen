@@ -150,14 +150,6 @@ let filePath = args._[0] || ".";
     }
   }
 
-  // Automatically submit the bom data
-  if (args.serverUrl && args.apiKey) {
-    bom.submitBom(args, bomNSData.bomXml, function (err, res, body) {
-      if (err) console.log(err);
-      console.log("Response from server", body);
-    });
-  }
-
   if (args.print && bomNSData.bomJson && bomNSData.bomJson.components) {
     const { table } = require("table");
     const data = [["Group", "Name", "Version"]];
