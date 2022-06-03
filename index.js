@@ -240,7 +240,7 @@ function addComponent(
       return;
     }
 
-    const m = version.match(GITHUB_URL_PATTERN);
+    const m = version?.match?.(GITHUB_URL_PATTERN) ?? null;
     if (m !== null) {
       pptype = m[1].replace(/\.(com|org)$/i, '');
       pversion = m[3];
