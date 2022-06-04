@@ -826,7 +826,7 @@ const createJavaBom = async (path, options) => {
             GRADLE_CMD_LOCAL = pathLib.resolve(pathLib.join(basePath, "gradlew"));
           }
 
-          if (DEBUG_MODE) {
+          if (DEBUG_MODE || 1) {
             console.log(
               "Executing",
               GRADLE_CMD_LOCAL || GRADLE_CMD,
@@ -1535,6 +1535,21 @@ const createGoBom = async (path, options) => {
   if (gomodFiles.length) {
     // Use the go list -deps and go mod why commands to generate a good quality BoM for non-docker invocations
     if (options.projectType !== "docker") {
+      const { stdout: listEmAllOutput, status: listEmAllStatus } = spawnSync(
+          "go",
+          [
+            "list",
+            "-m",
+            "all",
+          ],
+          { cwd: path, encoding: "utf-8", timeout: TIMEOUT_MS }
+      );
+      if (!listEmAllStatus) {
+        const dlist = await utils.parseGoListDep(listEmAllOutput.toString(), gosumMap);
+        if (dlist && dlist.length) {
+          pkgList = pkgList.concat(dlist);
+        }
+      }
       if (DEBUG_MODE) console.log("Executing go list -deps in", path);
       const result = spawnSync(
         "go",
