@@ -1383,6 +1383,18 @@ const createPythonBom = async (path, options) => {
     }
   }
 
+  const setupFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "setup.py");
+  if (setupFiles?.length) {
+    for (let f of setupFiles) {
+      try {
+        executePython(['-m', 'pip', 'install', '--user', '.'], pathLib.dirname(f));
+      } catch (ex) {}
+      try {
+        executePython(['-m', 'pigar', '--without-referenced-comments', '-y'], pathLib.dirname(f));
+      } catch (ex) {}
+    }
+  }
+
   const
       reqFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "requirements.txt"),
       reqDirFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "requirements/*.txt");
@@ -1391,7 +1403,7 @@ const createPythonBom = async (path, options) => {
 
     if (reqFiles?.length) {
       for (let f of reqFiles) {
-        const reqData = executePython(['-m', 'pip', 'freeze'], pathLib.dirname(f));
+        const reqData = fs.readFileSync(f, { encoding: "utf-8" });
         const dlist = await utils.parseReqFile(reqData);
         if (dlist?.length) pkgList.push(...dlist);
       }
@@ -1417,16 +1429,14 @@ const createPythonBom = async (path, options) => {
   const setupPy = pathLib.join(path, "setup.py");
   const setupPyMode = fs.existsSync(setupPy);
   if (setupPyMode) {
-    /* */
-    executePython(['setup.py', 'install'], pathLib.dirname(setupPy));
+    try {
+      executePython(['-m', 'pip', 'install', '--user', '.'], pathLib.dirname(setupPy));
+    } catch (ex) {
+      console.log('ex', ex);
+    }
 
     const reqData = executePython(['-m', 'pip', 'freeze'], pathLib.dirname(setupPy));
     const pkgList = await utils.parseReqFile(reqData);
-
-     /*/
-    const setupPyData = fs.readFileSync(setupPy, { encoding: "utf-8" });
-    pkgList = await utils.parseSetupPyFile(setupPyData);
-    /* */
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: "setup.py",

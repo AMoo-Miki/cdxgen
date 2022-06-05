@@ -1237,7 +1237,7 @@ const parseReqFile = async function (reqData) {
   const pkgList = [];
   let fetchIndirectDeps = false;
   reqData.split("\n").forEach((l) => {
-    console.log('::::', l);
+    if (l.startsWith('pigar @ git') || /@\s+file:/.test(l)) return;
     if (!l.startsWith("#")) {
       if (l.indexOf("=") > -1) {
         let tmpA = l.split(/(==|<=|~=|>=)/);
@@ -3024,16 +3024,24 @@ const findPython = () => {
   try {
     output = executeCmd('python3', ['-m', 'pip', '--version']);
     console.log('Using python3:', output);
-    return CMD_PYTHON = 'python3';
+    CMD_PYTHON = 'python3';
   } catch (ex) {}
+
+  if (!CMD_PYTHON) {
+    try {
+      output = executeCmd('python', ['-m', 'pip', '--version']);
+      console.log('Using python:', output);
+      CMD_PYTHON = 'python';
+    } catch (ex) {}
+  }
+
+  if (!CMD_PYTHON) throw 'NOT_FOUND_PYTHON';
 
   try {
-    output = executeCmd('python', ['-m', 'pip', '--version']);
-    console.log('Using python:', output);
-    return CMD_PYTHON = 'python';
+    executeCmd(CMD_PYTHON, ['-m', 'pip', 'install', '-U', 'git+https://github.com/damnever/pigar.git']);
   } catch (ex) {}
 
-  throw 'NOT_FOUND_PYTHON';
+  return CMD_PYTHON;
 };
 
 /**
@@ -3058,10 +3066,6 @@ exports.executePython = executePython;
 const executeCmd = (cmd, args, cwd) => {
   if (DEBUG_MODE) console.log(`Executing "${cmd} ${args.join(' ')}"`, cwd ? `in "${cwd}"...` : '...');
   const { stdout, stderr, status, error } = spawnSync(cmd, args, { encoding: 'utf-8', cwd });
-
-  console.log('stdout', stdout);
-  console.log('stderr', stderr);
-  console.error('------------------');
 
   if (status !== 0 || error) {
     console.error(`Command failed: "${cmd} ${args.join(' ')}" in "${cwd}"...`);
