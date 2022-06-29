@@ -15,7 +15,8 @@ const { spawnSync } = require("child_process");
 const propertiesReader = require("properties-reader");
 const semver = require("semver");
 const StreamZip = require("node-stream-zip");
-const pathLib = require("path");
+const YAML = require("yaml");
+const yarnLockV1 = require("@yarnpkg/lockfile");
 
 // Debug mode flag
 const DEBUG_MODE = true ||
@@ -314,128 +315,108 @@ exports.parsePkgLock = parsePkgLock;
  */
 const parseYarnLock = async function (yarnLockFile) {
   const pkgList = [];
-  if (fs.existsSync(yarnLockFile)) {
-    const lockData = fs.readFileSync(yarnLockFile, "utf8");
-    let name = "";
-    let alias = "";
-    let group = "";
-    let version = "";
-    let integrity = "";
-    let identifiers = undefined;
-    let resolved = false;
-    let reResolved = /^resolved\s+"https:\/\/registry\.(?:yarnpkg\.com|npmjs\.org)\/(.+?)\/-\/(?:.+?)-(\d+\..+?)\.tgz/;
-    let match;
-    const parseName = fullName => {
-      let group, name;
-      if (fullName.indexOf("/") > -1) {
-        const parts = fullName.split("/");
-        group = parts[0];
-        name = parts[1];
-      } else {
-        name = fullName;
-      }
+  if (!fs.existsSync(yarnLockFile)) return [];
 
-      return { group, name };
-    };
-
-    lockData.split("\n").forEach((l) => {
-      if (
-        l === "\n" ||
-        l.startsWith("dependencies") ||
-        l.startsWith("    ") ||
-        l.startsWith("#")
-      ) {
-        return;
-      }
-      if (!l.startsWith(" ")) {
-        if (name !== "" && version !== "" && integrity !== "" && !resolved) {
-          pkgList.push({
-            group: group,
-            name: name,
-            alias: alias,
-            identifiers: identifiers,
-            version: version,
-            _integrity: integrity,
-          });
-        }
-
-        const tmpA = l.replace(/["']/g, "").replace(/^@/, '!').split("@");
-        if (tmpA.length >= 2) {
-          ({ group, name } = parseName(tmpA[0].replace(/^!/, '@')));
-          alias = "";
-        }
-        identifiers = l.replace(/(["']|:\s*$)/g, "").split(/\s*,\s*/);
-      } else {
-        l = l.trim();
-        const parts = l.split(" ");
-        if (l.startsWith("version") && !resolved) {
-          version = parts[1].replace(/"/g, "");
-        }
-        if (l.startsWith("integrity")) {
-          integrity = parts[1];
-        }
-        if (l.startsWith("name")) {
-          alias = parts[1];
-        }
-        // checksum used by yarn 2/3 is hex encoded
-        if (l.startsWith("checksum")) {
-          integrity =
-            "sha512-" + Buffer.from(parts[1], "hex").toString("base64");
-        }
-        if (l.startsWith("resolved")) {
-          const tmpB = parts[1].split("#");
-          if (tmpB.length > 1) {
-            const digest = tmpB[1].replace(/"/g, "");
-            integrity = "sha256-" + digest;
-          }
-
-          match = l.match(reResolved);
-          if (match) {
-            resolved = true;
-            ({ group, name } = parseName(match[1]));
-            version = match[2];
-          }
-        }
-      }
-      if (name !== "" && version !== "" && integrity !== "" && resolved) {
-        pkgList.push({
-          group: group,
-          name: name,
-          alias: alias,
-          identifiers: identifiers,
-          version: version,
-          _integrity: integrity,
-        });
-        group = "";
-        name = "";
-        alias = "";
-        version = "";
-        integrity = "";
-        identifiers = undefined;
-        resolved = false;
-      }
-    });
-    if (name !== "" && version !== "" && integrity !== "" && !resolved) {
-      pkgList.push({
-        group: group,
-        name: name,
-        alias: alias,
-        identifiers: identifiers,
-        version: version,
-        _integrity: integrity,
-      });
-    }
+  const lockData = fs.readFileSync(yarnLockFile, "utf8");
+  if (lockData.includes(' version: ')) { // is v2
+    let { __metadata, ...dependencies } = YAML.parse(lockData);
+    if (__metadata?.version) pkgList.push(...parsDependenciesFromYarnLockV2(dependencies));
+  } else {
+    let { object: dependencies } = yarnLockV1.parse(lockData);
+    pkgList.push(...parsDependenciesFromYarnLockV1(dependencies));
   }
+
   if (process.env.FETCH_LICENSE) {
     if (DEBUG_MODE) {
       console.log(
-        `About to fetch license information for ${pkgList.length} packages`
+          `About to fetch license information for ${pkgList.length} packages`
       );
     }
     return await getNpmMetadata(pkgList);
   }
+
   return pkgList;
+}
+
+const parsDependenciesFromYarnLockV1 = dependencies => {
+  const pkgList = new Map();
+  const reResolved = /^resolved\s+"https:\/\/registry\.(?:yarnpkg\.com|npmjs\.org)\/(.+?)\/-\/(?:.+?)-(\d+\..+?)\.tgz/;
+
+  const parseName = fullName => {
+    let group, name, parts;
+    if (fullName.indexOf("/") > -1) {
+      ([group, ...parts] = fullName.split("/"));
+      name = parts.join('/');
+    } else {
+      name = fullName;
+    }
+
+    return { group, name };
+  };
+
+  for (const key in dependencies) {
+    const dep = dependencies[key];
+    const match = dep.resolved?.match?.(reResolved);
+    let group, name, version;
+    if (match) {
+      ({ group, name } = parseName(match[1]));
+      version = match[2];
+    } else {
+      ({ group, name } = parseName(key.replace(/^@/, '!').replace(/@.*$/, '').replace(/^!/, '@')));
+      version = dep.version;
+    }
+
+    const idx = `${group}//${name}//${version}`;
+    pkgList.set(idx, {
+      name, group, version,
+      alias: dep.name,
+      _integrity: dep.integrity
+    });
+  }
+
+  return Array.from(pkgList.values());
 };
+
+const parsDependenciesFromYarnLockV2 = dependencies => {
+  console.log('parsDependenciesFromYarnLockV2');
+  const pkgList = new Map();
+  const reResolved = /^resolved\s+"https:\/\/registry\.(?:yarnpkg\.com|npmjs\.org)\/(.+?)\/-\/(?:.+?)-(\d+\..+?)\.tgz/;
+
+  const parseName = fullName => {
+    let group, name, parts;
+    if (fullName.indexOf("/") > -1) {
+      ([group, ...parts] = fullName.split("/"));
+      name = parts.join('/');
+    } else {
+      name = fullName;
+    }
+
+    return { group, name };
+  };
+
+  for (const key of Object.keys(dependencies)) {
+    const dep = dependencies[key];
+    let group, name, version;
+    const parts = dep.resolution?.split?.('@npm:');
+    if (parts.length === 2) {
+      ({ group, name } = parseName(parts[0]));
+      version = parts[1];
+    } else {
+      ({ group, name } = parseName(key.replace(/^@/, '!').replace(/@.*$/, '').replace(/^!/, '@')));
+      version = dep.version;
+    }
+
+    const idx = `${group}//${name}//${version}`;
+    pkgList.set(idx, {
+      name, group, version,
+      alias: dep.name,
+      _integrity: dep.checksum
+    });
+  }
+
+  return Array.from(pkgList.values());
+};
+
 exports.parseYarnLock = parseYarnLock;
 
 /**

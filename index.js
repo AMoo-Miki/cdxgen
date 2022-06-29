@@ -1152,6 +1152,7 @@ const createNodejsBom = async (path, options) => {
     path,
     (options.multiProject ? "**/" : "") + "yarn.lock"
   );
+  console.log(yarnLockFiles);
   const pkgLockFiles = utils.getAllFiles(
     path,
     (options.multiProject ? "**/" : "") + "package-lock.json"
