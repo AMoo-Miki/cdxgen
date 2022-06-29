@@ -1390,7 +1390,7 @@ const createPythonBom = async (path, options) => {
         executePython(['-m', 'pip', 'install', '--user', '.'], pathLib.dirname(f));
       } catch (ex) {}
       try {
-        executePython(['-m', 'pigar', '--without-referenced-comments', '-y'], pathLib.dirname(f));
+        executePython(['-m', 'pigar', '-y'], pathLib.dirname(f));
       } catch (ex) {}
     }
   }

@@ -3038,7 +3038,7 @@ const findPython = () => {
   if (!CMD_PYTHON) throw 'NOT_FOUND_PYTHON';
 
   try {
-    executeCmd(CMD_PYTHON, ['-m', 'pip', 'install', '-U', 'git+https://github.com/damnever/pigar.git']);
+    executeCmd(CMD_PYTHON, ['-m', 'pip', 'install', '-U', 'pigar']);
   } catch (ex) {}
 
   return CMD_PYTHON;
