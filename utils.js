@@ -235,7 +235,7 @@ const getNpmMetadata = async function (pkgList) {
 };
 exports.getNpmMetadata = getNpmMetadata;
 
-const _getDepPkgList = async function (pkgList, pkg) {
+const _getDepPkgList = async function (pkgList, pkg, pkgLockFile) {
   if (pkg && pkg.dependencies) {
     const pkgKeys = Object.keys(pkg.dependencies);
     for (var k in pkgKeys) {
@@ -244,11 +244,12 @@ const _getDepPkgList = async function (pkgList, pkg) {
         name: name,
         version: pkg.dependencies[name].version,
         _integrity: pkg.dependencies[name].integrity,
-        dev: pkg.dependencies[name].dev
+        dev: pkg.dependencies[name].dev,
+        _src: pkgLockFile,
       });
       // Include child dependencies
       if (pkg.dependencies[name].dependencies) {
-        await _getDepPkgList(pkgList, pkg.dependencies[name]);
+        await _getDepPkgList(pkgList, pkg.dependencies[name], pkgLockFile);
       }
     }
   }
@@ -278,6 +279,7 @@ const parsePkgJson = async (pkgJsonFile) => {
         name: pkgIdentifier.fullName || pkgData.name,
         group: pkgIdentifier.scope || "",
         version: pkgData.version,
+        _src: pkgJsonFile
       });
     } catch (err) {}
   }
@@ -302,7 +304,7 @@ const parsePkgLock = async (pkgLockFile) => {
   const pkgList = [];
   if (fs.existsSync(pkgLockFile)) {
     const lockData = JSON.parse(fs.readFileSync(pkgLockFile, "utf8"));
-    return await _getDepPkgList(pkgList, lockData);
+    return await _getDepPkgList(pkgList, lockData, pkgLockFile);
   }
   return pkgList;
 };
@@ -320,10 +322,10 @@ const parseYarnLock = async function (yarnLockFile) {
   const lockData = fs.readFileSync(yarnLockFile, "utf8");
   if (lockData.includes(' version: ')) { // is v2
     let { __metadata, ...dependencies } = YAML.parse(lockData);
-    if (__metadata?.version) pkgList.push(...parsDependenciesFromYarnLockV2(dependencies));
+    if (__metadata?.version) pkgList.push(...parsDependenciesFromYarnLockV2(dependencies, yarnLockFile));
   } else {
     let { object: dependencies } = yarnLockV1.parse(lockData);
-    pkgList.push(...parsDependenciesFromYarnLockV1(dependencies));
+    pkgList.push(...parsDependenciesFromYarnLockV1(dependencies, yarnLockFile));
   }
 
   if (process.env.FETCH_LICENSE) {
@@ -338,7 +340,7 @@ const parseYarnLock = async function (yarnLockFile) {
   return pkgList;
 }
 
-const parsDependenciesFromYarnLockV1 = dependencies => {
+const parsDependenciesFromYarnLockV1 = (dependencies, yarnLockFile) => {
   const pkgList = new Map();
   const reResolved = /^resolved\s+"https:\/\/registry\.(?:yarnpkg\.com|npmjs\.org)\/(.+?)\/-\/(?:.+?)-(\d+\..+?)\.tgz/;
 
@@ -370,17 +372,16 @@ const parsDependenciesFromYarnLockV1 = dependencies => {
     pkgList.set(idx, {
       name, group, version,
       alias: dep.name,
-      _integrity: dep.integrity
+      _integrity: dep.integrity,
+      _src: yarnLockFile,
     });
   }
 
   return Array.from(pkgList.values());
 };
 
-const parsDependenciesFromYarnLockV2 = dependencies => {
-  console.log('parsDependenciesFromYarnLockV2');
+const parsDependenciesFromYarnLockV2 = (dependencies, yarnLockFile) => {
   const pkgList = new Map();
-  const reResolved = /^resolved\s+"https:\/\/registry\.(?:yarnpkg\.com|npmjs\.org)\/(.+?)\/-\/(?:.+?)-(\d+\..+?)\.tgz/;
 
   const parseName = fullName => {
     let group, name, parts;
@@ -410,7 +411,8 @@ const parsDependenciesFromYarnLockV2 = dependencies => {
     pkgList.set(idx, {
       name, group, version,
       alias: dep.name,
-      _integrity: dep.checksum
+      _integrity: dep.checksum,
+      _src: yarnLockFile,
     });
   }
 
@@ -456,6 +458,7 @@ const parseNodeShrinkwrap = async function (swFile) {
             name: name,
             version: version,
             _integrity: integrity,
+            _src: swFile,
           });
         }
       }
@@ -513,6 +516,7 @@ const parsePnpmLock = async function (pnpmLock) {
             version: version,
             scope,
             _integrity: integrity,
+            _src: pnpmLock
           });
         }
       }
@@ -547,6 +551,7 @@ const parseBowerJson = async (bowerJsonFile) => {
         version: pkgData.version || "",
         description: pkgData.description || "",
         license: pkgData.license || "",
+        _src: bowerJsonFile,
       });
     } catch (err) {}
   }
@@ -606,6 +611,7 @@ const parseMinJs = async (minJsFile) => {
               name: pkgIdentifier.fullName || pkgData.name,
               group: pkgIdentifier.scope || "",
               version: tmpB[1].replace(/^v/, "") || "",
+              _src: minJsFile,
             });
             return;
           }
@@ -656,6 +662,7 @@ const parsePom = function (pomFile) {
           name: adep.artifactId ? adep.artifactId._ : "",
           version: versionStr,
           qualifiers: { type: "jar" },
+          _src: pomFile,
         });
       }
     }
@@ -668,7 +675,7 @@ exports.parsePom = parsePom;
  * Parse maven tree output
  * @param {string} rawOutput Raw string output
  */
-const parseMavenTree = function (rawOutput) {
+const parseMavenTree = function (rawOutput, pomFile) {
   if (!rawOutput) {
     return [];
   }
@@ -693,6 +700,7 @@ const parseMavenTree = function (rawOutput) {
             name: pkgArr[1],
             version: versionStr,
             qualifiers: { type: "jar" },
+            _src: pomFile,
           });
         }
       }
@@ -706,7 +714,7 @@ exports.parseMavenTree = parseMavenTree;
  * Parse gradle dependencies output
  * @param {string} rawOutput Raw string output
  */
-const parseGradleDep = function (rawOutput) {
+const parseGradleDep = function (rawOutput, src) {
   if (typeof rawOutput === "string") {
     const deps = [];
     const keys_cache = {};
@@ -735,6 +743,7 @@ const parseGradleDep = function (rawOutput) {
                 name: verArr[1].trim(),
                 version: versionStr,
                 qualifiers: { type: "jar" },
+                _src: src,
               });
             }
           }
@@ -781,7 +790,7 @@ exports.parseGradleProjects = parseGradleProjects;
  * Parse bazel skyframe state output
  * @param {string} rawOutput Raw string output
  */
-const parseBazelSkyframe = function (rawOutput) {
+const parseBazelSkyframe = function (rawOutput, bazelFile) {
   if (typeof rawOutput === "string") {
     const deps = [];
     const keys_cache = {};
@@ -816,6 +825,7 @@ const parseBazelSkyframe = function (rawOutput) {
                 name,
                 version,
                 qualifiers: { type: "jar" },
+                _src: bazelFile,
               });
             }
           }
@@ -857,7 +867,7 @@ exports.parseBazelBuild = parseBazelBuild;
 /**
  * Parse dependencies in Key:Value format
  */
-const parseKVDep = function (rawOutput) {
+const parseKVDep = function (rawOutput, project) {
   if (typeof rawOutput === "string") {
     const deps = [];
     rawOutput.split("\n").forEach((l) => {
@@ -875,6 +885,7 @@ const parseKVDep = function (rawOutput) {
           name: tmpA[0],
           version: tmpA[1],
           qualifiers: { type: "jar" },
+          _src: project,
         });
       }
     });
@@ -1086,8 +1097,11 @@ const getPyMetadata = async function (pkgList, fetchIndirectDeps) {
         }
         const requires_dist = body.info.requires_dist;
         if (requires_dist && requires_dist.length) {
-          indirectDeps = indirectDeps.concat(
-              requires_dist.map(parsePyRequiresDist)
+          indirectDeps.push(
+              ...(requires_dist.map(parsePyRequiresDist).map(o => {
+                o._src = p._src;
+                return o;
+              }))
           );
         }
         if (body.releases && body.releases[p.version]) {
@@ -1125,8 +1139,10 @@ exports.getPyMetadata = getPyMetadata;
  *
  * @param {Object} mData bdist_wheel metadata
  */
-const parseBdistMetadata = function (mData) {
-  const pkg = {};
+const parseBdistMetadata = function (mData, mdFile) {
+  const pkg = {
+    _src: mdFile,
+  };
   mData.split("\n").forEach((l) => {
     if (l.indexOf("Name: ") > -1) {
       pkg.name = l.split("Name: ")[1];
@@ -1151,7 +1167,7 @@ exports.parseBdistMetadata = parseBdistMetadata;
  *
  * @param {Object} lockData JSON data from Pipfile.lock
  */
-const parsePiplockData = async function (lockData) {
+const parsePiplockData = async function (lockData, piplockFile) {
   const pkgList = [];
   Object.keys(lockData)
     .filter((i) => i !== "_meta")
@@ -1160,7 +1176,7 @@ const parsePiplockData = async function (lockData) {
       Object.keys(depBlock).forEach((p) => {
         const pkg = depBlock[p];
         let versionStr = pkg.version.replace("==", "");
-        pkgList.push({ name: p, version: versionStr });
+        pkgList.push({ name: p, version: versionStr, _src: piplockFile });
       });
     });
   return await getPyMetadata(pkgList, false);
@@ -1172,7 +1188,7 @@ exports.parsePiplockData = parsePiplockData;
  *
  * @param {Object} lockData JSON data from poetry.lock
  */
-const parsePoetrylockData = async function (lockData) {
+const parsePoetrylockData = async function (lockData, poetryFile) {
   const pkgList = [];
   let pkg = null;
   if (!lockData) {
@@ -1184,7 +1200,7 @@ const parsePoetrylockData = async function (lockData) {
     // Package section starts with this marker
     if (l.indexOf("[[package]]") > -1) {
       if (pkg && pkg.name && pkg.version) {
-        pkgList.push(pkg);
+        pkgList.push({...pkg, _src: poetryFile});
       }
       pkg = {};
     }
@@ -1214,7 +1230,7 @@ exports.parsePoetrylockData = parsePoetrylockData;
  *
  * @param {Object} reqData Requirements.txt data
  */
-const parseReqFile = async function (reqData) {
+const parseReqFile = async function (reqData, reqFile) {
   const pkgList = [];
   let fetchIndirectDeps = false;
   reqData.split("\n").forEach((l) => {
@@ -1237,6 +1253,7 @@ const parseReqFile = async function (reqData) {
           pkgList.push({
             name: tmpA[0].trim(),
             version: versionStr,
+            _src: reqFile
           });
         }
       } else if (/[>|\[@]/.test(l)) {
@@ -1247,12 +1264,14 @@ const parseReqFile = async function (reqData) {
         pkgList.push({
           name: tmpA[0].trim(),
           version: null,
+          _src: reqFile,
         });
       } else if (l) {
         l = l.replace(/[#;].*$/, '');
         pkgList.push({
           name: l.trim(),
           version: null,
+          _src: reqFile
         });
       }
     }
@@ -1266,8 +1285,7 @@ exports.parseReqFile = parseReqFile;
  *
  * @param {Object} setupPyData Contents of setup.py
  */
-const parseSetupPyFile = async function (setupPyData) {
-  console.log('setupPyData', setupPyData);
+const parseSetupPyFile = async function (setupPyData, setupPyFile) {
   let lines = [];
   let requires_found = false;
   let should_break = false;
@@ -1287,8 +1305,7 @@ const parseSetupPyFile = async function (setupPyData) {
       lines.push(tmpA);
     }
   });
-  console.log(lines);
-  return await parseReqFile(lines.join("\n"));
+  return await parseReqFile(lines.join("\n"), setupPyFile);
 };
 exports.parseSetupPyFile = parseSetupPyFile;
 
@@ -1437,7 +1454,7 @@ const getGoPkgLicense = async function (repoMetadata) {
 };
 exports.getGoPkgLicense = getGoPkgLicense;
 
-const getGoPkgComponent = async function (group, name, version, hash) {
+const getGoPkgComponent = async function (group, name, version, hash, src) {
   let pkg = {};
   let license = undefined;
   if (process.env.FETCH_LICENSE) {
@@ -1454,15 +1471,16 @@ const getGoPkgComponent = async function (group, name, version, hash) {
   pkg = {
     group: group,
     name: name,
-    version: version,
+    version: version?.replace?.(/^v/, ''),
     _integrity: hash,
     license: license,
+    _src: src
   };
   return pkg;
 };
 exports.getGoPkgComponent = getGoPkgComponent;
 
-const parseGoModData = async function (goModData, gosumMap) {
+const parseGoModData = async function (goModData, gosumMap, gomodFile) {
   const pkgComponentsList = [];
   let isModReplacement = false;
 
@@ -1512,7 +1530,7 @@ const parseGoModData = async function (goModData, gosumMap) {
       if (gosumHash === undefined) {
         continue;
       }
-      let component = await getGoPkgComponent(group, name, version, gosumHash);
+      let component = await getGoPkgComponent(group, name, version, gosumHash, gomodFile);
       pkgComponentsList.push(component);
     } else {
       // Add group, name and version component properties for replacement modules
@@ -1528,7 +1546,7 @@ const parseGoModData = async function (goModData, gosumMap) {
       if (gosumHash === undefined) {
         continue;
       }
-      let component = await getGoPkgComponent(group, name, version, gosumHash);
+      let component = await getGoPkgComponent(group, name, version, gosumHash, gomodFile);
       pkgComponentsList.push(component);
     }
   }
@@ -1544,7 +1562,7 @@ exports.parseGoModData = parseGoModData;
  * @param {string} rawOutput Output from go list invocation
  * @returns List of packages
  */
-const parseGoListDep = async function (rawOutput, gosumMap) {
+const parseGoListDep = async function (rawOutput, gosumMap, src) {
   if (typeof rawOutput === "string") {
     const deps = [];
     const keys_cache = {};
@@ -1564,10 +1582,11 @@ const parseGoListDep = async function (rawOutput, gosumMap) {
           }
           let gosumHash = gosumMap[`${group}/${name}/${version}`];
           let component = await getGoPkgComponent(
-            group,
-            name,
-            version,
-            gosumHash
+              group,
+              name,
+              version,
+              gosumHash,
+              src
           );
           deps.push(component);
         }
@@ -1599,7 +1618,7 @@ const parseGoModWhy = function (rawOutput) {
 };
 exports.parseGoModWhy = parseGoModWhy;
 
-const parseGosumData = async function (gosumData) {
+const parseGosumData = async function (gosumData, gosumFile) {
   const pkgList = [];
   if (!gosumData) {
     return pkgList;
@@ -1634,6 +1653,7 @@ const parseGosumData = async function (gosumData) {
         version: version,
         _integrity: hash,
         license: license,
+        _src: gosumFile
       });
     }
   }
@@ -1641,7 +1661,7 @@ const parseGosumData = async function (gosumData) {
 };
 exports.parseGosumData = parseGosumData;
 
-const parseGopkgData = async function (gopkgData) {
+const parseGopkgData = async function (gopkgData, gopkgLockFile) {
   const pkgList = [];
   if (!gopkgData) {
     return pkgList;
@@ -1653,7 +1673,7 @@ const parseGopkgData = async function (gopkgData) {
     let value = null;
     if (l.indexOf("[[projects]]") > -1) {
       if (pkg) {
-        pkgList.push(pkg);
+        pkgList.push({...pkg, _src: gopkgLockFile});
       }
       pkg = {};
     }
@@ -1693,7 +1713,7 @@ const parseGopkgData = async function (gopkgData) {
 };
 exports.parseGopkgData = parseGopkgData;
 
-const parseGoVersionData = async function (buildInfoData) {
+const parseGoVersionData = async function (buildInfoData, file) {
   const pkgList = [];
   if (!buildInfoData) {
     return pkgList;
@@ -1717,7 +1737,7 @@ const parseGoVersionData = async function (buildInfoData) {
     if (tmpA.length === 4) {
       hash = tmpA[tmpA.length - 1].replace("h1:", "sha256-");
     }
-    let component = await getGoPkgComponent(group, name, tmpA[2].trim(), hash);
+    let component = await getGoPkgComponent(group, name, tmpA[2].trim(), hash, file);
     pkgList.push(component);
   }
   return pkgList;
@@ -1819,7 +1839,7 @@ exports.parseGemspecData = parseGemspecData;
  *
  * @param {*} gemLockData Gemfile.lock data
  */
-const parseGemfileLockData = async function (gemLockData) {
+const parseGemfileLockData = async function (gemLockData, gemLockFile) {
   const pkgList = [];
   const pkgnames = {};
   if (!gemLockData) {
@@ -1838,6 +1858,7 @@ const parseGemfileLockData = async function (gemLockData) {
           pkgList.push({
             name,
             version,
+            _src: gemLockFile
           });
           pkgnames[name] = true;
         }
@@ -1946,7 +1967,7 @@ const getDartMetadata = async function (pkgList) {
 };
 exports.getDartMetadata = getDartMetadata;
 
-const parseCargoTomlData = async function (cargoData) {
+const parseCargoTomlData = async function (cargoData, cargoFile) {
   let pkgList = [];
   if (!cargoData) {
     return pkgList;
@@ -1958,7 +1979,7 @@ const parseCargoTomlData = async function (cargoData) {
     let value = null;
     if (l.indexOf("[package]") > -1) {
       if (pkg) {
-        pkgList.push(pkg);
+        pkgList.push({...pkg, _src: cargoFile});
       }
       pkg = {};
     }
@@ -1989,7 +2010,7 @@ const parseCargoTomlData = async function (cargoData) {
       }
     } else if (dependencyMode && l.indexOf("=") > -1) {
       if (pkg) {
-        pkgList.push(pkg);
+        pkgList.push({...pkg, _src: cargoFile});
       }
       pkg = undefined;
       let tmpA = l.split(" = ");
@@ -2009,12 +2030,12 @@ const parseCargoTomlData = async function (cargoData) {
       if (name && version) {
         name = name.replace(new RegExp("[\"']", "g"), "");
         version = version.replace(new RegExp("[\"']", "g"), "");
-        pkgList.push({ name, version });
+        pkgList.push({ name, version, _src: cargoFile });
       }
     }
   });
   if (pkg) {
-    pkgList.push(pkg);
+    pkgList.push({...pkg, _src: cargoFile});
   }
   if (process.env.FETCH_LICENSE) {
     return await getCratesMetadata(pkgList);
@@ -2024,7 +2045,7 @@ const parseCargoTomlData = async function (cargoData) {
 };
 exports.parseCargoTomlData = parseCargoTomlData;
 
-const parseCargoData = async function (cargoData) {
+const parseCargoData = async function (cargoData, cargoLockFile) {
   const pkgList = [];
   if (!cargoData) {
     return pkgList;
@@ -2039,7 +2060,7 @@ const parseCargoData = async function (cargoData) {
     }
     if (l.indexOf("[[package]]") > -1) {
       if (pkg) {
-        pkgList.push(pkg);
+        pkgList.push({...pkg, _src: cargoLockFile});
       }
       pkg = {};
     }
@@ -2072,7 +2093,7 @@ const parseCargoData = async function (cargoData) {
 };
 exports.parseCargoData = parseCargoData;
 
-const parsePubLockData = async function (pubLockData) {
+const parsePubLockData = async function (pubLockData, pubFile) {
   const pkgList = [];
   if (!pubLockData) {
     return pkgList;
@@ -2097,7 +2118,7 @@ const parsePubLockData = async function (pubLockData) {
         case "version":
           pkg.version = value;
           if (pkg.name) {
-            pkgList.push(pkg);
+            pkgList.push({...pkg, _src: pubFile});
           }
           pkg = {};
           break;
@@ -2112,7 +2133,7 @@ const parsePubLockData = async function (pubLockData) {
 };
 exports.parsePubLockData = parsePubLockData;
 
-const parsePubYamlData = async function (pubYamlData) {
+const parsePubYamlData = async function (pubYamlData, yamlFile) {
   const pkgList = [];
   const yamlObj = yaml.load(pubYamlData);
   if (!yamlObj) {
@@ -2123,12 +2144,13 @@ const parsePubYamlData = async function (pubYamlData) {
     description: yamlObj.description,
     version: yamlObj.version,
     homepage: { url: yamlObj.homepage },
+    _src: yamlFile
   });
   return pkgList;
 };
 exports.parsePubYamlData = parsePubYamlData;
 
-const parseCabalData = async function (cabalData) {
+const parseCabalData = async function (cabalData, cabalFile) {
   const pkgList = [];
   if (!cabalData) {
     return pkgList;
@@ -2148,6 +2170,7 @@ const parseCabalData = async function (cabalData) {
         pkgList.push({
           name,
           version,
+          _src: cabalFile
         });
       }
     }
@@ -2156,7 +2179,7 @@ const parseCabalData = async function (cabalData) {
 };
 exports.parseCabalData = parseCabalData;
 
-const parseMixLockData = async function (mixData) {
+const parseMixLockData = async function (mixData, mixFile) {
   const pkgList = [];
   if (!mixData) {
     return pkgList;
@@ -2174,6 +2197,7 @@ const parseMixLockData = async function (mixData) {
           pkgList.push({
             name,
             version,
+            _src: mixFile
           });
         }
       }
@@ -2183,7 +2207,7 @@ const parseMixLockData = async function (mixData) {
 };
 exports.parseMixLockData = parseMixLockData;
 
-const parseConanLockData = async function (conanLockData) {
+const parseConanLockData = async function (conanLockData, conanLockFile) {
   const pkgList = [];
   if (!conanLockData) {
     return pkgList;
@@ -2197,7 +2221,7 @@ const parseConanLockData = async function (conanLockData) {
     if (nodes[nk].ref) {
       const tmpA = nodes[nk].ref.split("/");
       if (tmpA.length === 2) {
-        pkgList.push({ name: tmpA[0], version: tmpA[1] });
+        pkgList.push({ name: tmpA[0], version: tmpA[1], _src: conanLockFile });
       }
     }
   }
@@ -2205,7 +2229,7 @@ const parseConanLockData = async function (conanLockData) {
 };
 exports.parseConanLockData = parseConanLockData;
 
-const parseConanData = async function (conanData) {
+const parseConanData = async function (conanData, conanFile) {
   const pkgList = [];
   if (!conanData) {
     return pkgList;
@@ -2217,7 +2241,7 @@ const parseConanData = async function (conanData) {
     if (l.includes("/")) {
       const tmpA = l.split("/");
       if (tmpA.length === 2) {
-        pkgList.push({ name: tmpA[0], version: tmpA[1] });
+        pkgList.push({ name: tmpA[0], version: tmpA[1], _src: conanFile });
       }
     }
   });
@@ -2256,6 +2280,7 @@ const parseNupkg = async function (nupkgFile) {
   pkg.name = m.id._;
   pkg.version = m.version._;
   pkg.description = m.description._;
+  pkg._src = nupkgFile;
   pkgList.push(pkg);
   if (process.env.FETCH_LICENSE) {
     return await getNugetMetadata(pkgList);
@@ -2265,7 +2290,7 @@ const parseNupkg = async function (nupkgFile) {
 };
 exports.parseNupkg = parseNupkg;
 
-const parseCsPkgData = async function (pkgData) {
+const parseCsPkgData = async function (pkgData, pkgConfigFile) {
   const pkgList = [];
   if (!pkgData) {
     return pkgList;
@@ -2287,6 +2312,7 @@ const parseCsPkgData = async function (pkgData) {
     let pkg = { group: "" };
     pkg.name = p.id;
     pkg.version = p.version;
+    pkg._src = pkgConfigFile;
     pkgList.push(pkg);
   }
   if (process.env.FETCH_LICENSE) {
@@ -2297,7 +2323,7 @@ const parseCsPkgData = async function (pkgData) {
 };
 exports.parseCsPkgData = parseCsPkgData;
 
-const parseCsProjData = async function (csProjData) {
+const parseCsProjData = async function (csProjData, csProjFile) {
   const pkgList = [];
   if (!csProjData) {
     return pkgList;
@@ -2326,6 +2352,7 @@ const parseCsProjData = async function (csProjData) {
         }
         pkg.name = pref.Include;
         pkg.version = pref.Version;
+        pkg._src = csProjFile;
         pkgList.push(pkg);
       }
       // .net framework use Reference
@@ -2340,6 +2367,7 @@ const parseCsProjData = async function (csProjData) {
         if (incParts.length > 1 && incParts[1].includes("Version")) {
           pkg.version = incParts[1].replace("Version=", "").trim();
         }
+        pkg._src = csProjFile;
         pkgList.push(pkg);
       }
     }
@@ -2352,7 +2380,7 @@ const parseCsProjData = async function (csProjData) {
 };
 exports.parseCsProjData = parseCsProjData;
 
-const parseCsProjAssetsData = async function (csProjData) {
+const parseCsProjAssetsData = async function (csProjData, projAssetsFile) {
   const pkgList = [];
   let pkg = null;
   if (!csProjData) {
@@ -2374,6 +2402,7 @@ const parseCsProjAssetsData = async function (csProjData) {
         group: "",
         name: tmpA[0],
         version: tmpA[tmpA.length - 1],
+        _src: projAssetsFile,
       };
       if (libData.sha256) {
         pkg._integrity = "sha256-" + libData.sha256;
@@ -2392,7 +2421,7 @@ const parseCsProjAssetsData = async function (csProjData) {
 };
 exports.parseCsProjAssetsData = parseCsProjAssetsData;
 
-const parseCsPkgLockData = async function (csLockData) {
+const parseCsPkgLockData = async function (csLockData, pkgLockFile) {
   const pkgList = [];
   let pkg = null;
   if (!csLockData) {
@@ -2409,6 +2438,7 @@ const parseCsPkgLockData = async function (csLockData) {
         group: "",
         name: alib,
         version: libData.resolved,
+        _src: pkgLockFile,
       };
       pkgList.push(pkg);
     }
@@ -2526,6 +2556,7 @@ const parseComposerLock = function (pkgLockFile) {
             license: pkg.license,
             description: pkg.description,
             scope: compScope,
+            _src: pkgLockFile
           });
         }
       }
@@ -2565,6 +2596,7 @@ const parseSbtLock = function (pkgLockFile) {
           version: pkg.version,
           _integrity: integrity,
           scope: compScope,
+          _src: pkgLockFile
         });
       }
     }
@@ -2788,6 +2820,7 @@ const extractJarArchive = function (jarFile, tempDir) {
               homepage: { url: pomMetadata["url"] },
               repository: { url: pomMetadata["scm"] },
               qualifiers: { type: "jar" },
+              _src: jarFile
             });
           }
         } else if (fs.existsSync(manifestFile)) {
@@ -2858,6 +2891,7 @@ const extractJarArchive = function (jarFile, tempDir) {
               group: group === "." ? "" : group || "",
               name: name || "",
               version,
+              _src: jarFile
             });
           } else {
             if (DEBUG_MODE) {

@@ -291,6 +291,7 @@ function addComponent(
       purl: purlString,
       supplier: pptype,
       externalReferences: addExternalReferences(pkg, format),
+      _src: pkg._src
     };
     if (format === "xml") {
       component["@type"] = determinePackageType(pkg);
@@ -463,6 +464,12 @@ const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
 
   if (!options.format || options.format === 'JSON') {
     const metadata = addMetadata("json");
+    const jsonComponents = listComponents(options, allImports, pkgInfo, ptype, "json");
+    if (context.src) {
+      jsonComponents.forEach(component => {
+        if (component._src) component._src = pathLib.relative(context.src, component._src);
+      });
+    }
 
     bomNSData.bomJson = {
       bomFormat: "CycloneDX",
@@ -470,7 +477,7 @@ const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
       serialNumber: serialNum,
       version: 1,
       metadata: metadata,
-      components: listComponents(options, allImports, pkgInfo, ptype, "json"),
+      components: jsonComponents,
     };
 
     if (context.src && context.filename) {
@@ -483,9 +490,14 @@ const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
   }
 
   if (!options.format || options.format === 'XML') {
-    const components = listComponents(options, allImports, pkgInfo, ptype, "xml");
-    if (components?.length) {
-      bomNSData.bomXml = buildBomXml(serialNum, components, context);
+    const xmlComponents = listComponents(options, allImports, pkgInfo, ptype, "xml");
+    if (xmlComponents?.length) {
+      if (context.src) {
+        xmlComponents.forEach(component => {
+          if (component._src) component._src = pathLib.relative(context.src, component._src);
+        });
+      }
+      bomNSData.bomXml = buildBomXml(serialNum, xmlComponents, context);
     }
   }
 
@@ -644,7 +656,7 @@ const createJavaBom = async (path, options) => {
               const mvnTreeString = fs.readFileSync(tempMvnTree, {
                 encoding: "utf-8",
               });
-              const dlist = utils.parseMavenTree(mvnTreeString);
+              const dlist = utils.parseMavenTree(mvnTreeString, f);
               if (dlist && dlist.length) {
                 pkgList = pkgList.concat(dlist);
               }
@@ -771,7 +783,7 @@ const createJavaBom = async (path, options) => {
               const sstdout = sresult.stdout;
               if (sstdout) {
                 const cmdOutput = Buffer.from(sstdout).toString();
-                const dlist = utils.parseGradleDep(cmdOutput);
+                const dlist = utils.parseGradleDep(cmdOutput, sp);
                 if (dlist && dlist.length) {
                   if (DEBUG_MODE) {
                     console.log(
@@ -857,7 +869,7 @@ const createJavaBom = async (path, options) => {
           const stdout = result.stdout;
           if (stdout) {
             const cmdOutput = Buffer.from(stdout).toString();
-            const dlist = utils.parseGradleDep(cmdOutput);
+            const dlist = utils.parseGradleDep(cmdOutput, f);
             if (dlist && dlist.length) {
               pkgList = pkgList.concat(dlist);
             } else {
@@ -938,7 +950,7 @@ const createJavaBom = async (path, options) => {
           stdout = result.stdout;
           if (stdout) {
             const cmdOutput = Buffer.from(stdout).toString();
-            const dlist = utils.parseBazelSkyframe(cmdOutput);
+            const dlist = utils.parseBazelSkyframe(cmdOutput, f);
             if (dlist && dlist.length) {
               pkgList = pkgList.concat(dlist);
             } else {
@@ -1085,7 +1097,7 @@ const createJavaBom = async (path, options) => {
             if (DEBUG_MODE) {
               console.log(cmdOutput);
             }
-            const dlist = utils.parseKVDep(cmdOutput);
+            const dlist = utils.parseKVDep(cmdOutput, basePath);
             if (dlist && dlist.length) {
               pkgList = pkgList.concat(dlist);
             }
@@ -1325,7 +1337,7 @@ const createPythonBom = async (path, options) => {
   if (poetryFiles?.length) {
     for (let f of poetryFiles) {
       const lockData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parsePoetrylockData(lockData);
+      const dlist = await utils.parsePoetrylockData(lockData, f);
       if (dlist?.length) pkgList.push(...dlist);
     }
 
@@ -1340,7 +1352,7 @@ const createPythonBom = async (path, options) => {
     // dist-info directories
     for (let mf of metadataFiles) {
       const mData = fs.readFileSync(mf, { encoding: "utf-8", });
-      const dlist = utils.parseBdistMetadata(mData);
+      const dlist = utils.parseBdistMetadata(mData, mf);
       if (dlist?.length) pkgList.push(...dlist);
     }
 
@@ -1356,7 +1368,7 @@ const createPythonBom = async (path, options) => {
     for (let wf of whlFiles) {
       const mData = await utils.readZipEntry(wf, "METADATA");
       if (mData) {
-        const dlist = utils.parseBdistMetadata(mData);
+        const dlist = utils.parseBdistMetadata(mData, wf);
         if (dlist?.length) pkgList.push(...dlist);
       }
     }
@@ -1374,7 +1386,7 @@ const createPythonBom = async (path, options) => {
     const piplockFile = pathLib.join(path, "Pipfile.lock");
     if (fs.existsSync(piplockFile)) {
       const lockData = JSON.parse(fs.readFileSync(piplockFile).toString());
-      pkgList = await utils.parsePiplockData(lockData);
+      pkgList = await utils.parsePiplockData(lockData, piplockFile);
       return buildBomNSData(options, pkgList, "pypi", {
         src: path,
         filename: "Pipfile.lock",
@@ -1405,7 +1417,7 @@ const createPythonBom = async (path, options) => {
     if (reqFiles?.length) {
       for (let f of reqFiles) {
         const reqData = fs.readFileSync(f, { encoding: "utf-8" });
-        const dlist = await utils.parseReqFile(reqData);
+        const dlist = await utils.parseReqFile(reqData, f);
         if (dlist?.length) pkgList.push(...dlist);
       }
 
@@ -1415,7 +1427,7 @@ const createPythonBom = async (path, options) => {
     if (reqDirFiles && reqDirFiles.length) {
       for (let f of reqDirFiles) {
         const reqData = fs.readFileSync(f, { encoding: "utf-8" });
-        const dlist = await utils.parseReqFile(reqData);
+        const dlist = await utils.parseReqFile(reqData, f);
         if (dlist?.length) pkgList.push(...dlist);
       }
       metadataFilename = reqDirFiles.join(", ");
@@ -1437,7 +1449,7 @@ const createPythonBom = async (path, options) => {
     }
 
     const reqData = executePython(['-m', 'pip', 'freeze'], pathLib.dirname(setupPy));
-    const pkgList = await utils.parseReqFile(reqData);
+    const pkgList = await utils.parseReqFile(reqData, setupPy);
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
       filename: "setup.py",
@@ -1464,7 +1476,7 @@ const createGoBom = async (path, options) => {
   }
   if (maybeBinary) {
     const buildInfoData = binaryLib.getGoBuildInfo(path);
-    const dlist = await utils.parseGoVersionData(buildInfoData);
+    const dlist = await utils.parseGoVersionData(buildInfoData, path);
     if (dlist && dlist.length) {
       pkgList = pkgList.concat(dlist);
     }
@@ -1499,7 +1511,7 @@ const createGoBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const gosumData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseGosumData(gosumData);
+      const dlist = await utils.parseGosumData(gosumData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1518,7 +1530,7 @@ const createGoBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const gosumData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseGosumData(gosumData);
+      const dlist = await utils.parseGosumData(gosumData, f);
       if (dlist && dlist.length) {
         dlist.forEach((pkg) => {
           gosumMap[`${pkg.group}/${pkg.name}/${pkg.version}`] = pkg._integrity;
@@ -1551,7 +1563,7 @@ const createGoBom = async (path, options) => {
           { cwd: path, encoding: "utf-8", timeout: TIMEOUT_MS }
       );
       if (!listEmAllStatus) {
-        const dlist = await utils.parseGoListDep(listEmAllOutput.toString(), gosumMap);
+        const dlist = await utils.parseGoListDep(listEmAllOutput.toString(), gosumMap, path);
         if (dlist && dlist.length) {
           pkgList = pkgList.concat(dlist);
         }
@@ -1632,7 +1644,7 @@ const createGoBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const gomodData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseGoModData(gomodData, gosumMap);
+      const dlist = await utils.parseGoModData(gomodData, gosumMap, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1649,7 +1661,7 @@ const createGoBom = async (path, options) => {
       const gopkgData = fs.readFileSync(f, {
         encoding: "utf-8",
       });
-      const dlist = await utils.parseGopkgData(gopkgData);
+      const dlist = await utils.parseGopkgData(gopkgData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1686,7 +1698,7 @@ const createRustBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const cargoData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseCargoTomlData(cargoData);
+      const dlist = await utils.parseCargoTomlData(cargoData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1707,7 +1719,7 @@ const createRustBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const cargoData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseCargoData(cargoData);
+      const dlist = await utils.parseCargoData(cargoData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1742,7 +1754,7 @@ const createDartBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const pubLockData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parsePubLockData(pubLockData);
+      const dlist = await utils.parsePubLockData(pubLockData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1793,7 +1805,7 @@ const createCppBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const conanLockData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseConanLockData(conanLockData);
+      const dlist = await utils.parseConanLockData(conanLockData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1808,7 +1820,7 @@ const createCppBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const conanData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseConanData(conanData);
+      const dlist = await utils.parseConanData(conanData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1840,7 +1852,7 @@ const createHaskellBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const cabalData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseCabalData(cabalData);
+      const dlist = await utils.parseCabalData(cabalData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -1871,7 +1883,7 @@ const createElixirBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       const mixData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseMixLockData(mixData);
+      const dlist = await utils.parseMixLockData(mixData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -2004,7 +2016,7 @@ const createRubyBom = async (path, options) => {
         console.log(`Parsing ${f}`);
       }
       let gemLockData = fs.readFileSync(f, { encoding: "utf-8" });
-      const dlist = await utils.parseGemfileLockData(gemLockData);
+      const dlist = await utils.parseGemfileLockData(gemLockData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -2066,7 +2078,7 @@ const createCsharpBom = async (path, options) => {
         console.log(`Parsing ${af}`);
       }
       let pkgData = fs.readFileSync(af, { encoding: "utf-8" });
-      const dlist = await utils.parseCsProjAssetsData(pkgData);
+      const dlist = await utils.parseCsProjAssetsData(pkgData, af);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -2079,7 +2091,7 @@ const createCsharpBom = async (path, options) => {
         console.log(`Parsing ${af}`);
       }
       let pkgData = fs.readFileSync(af, { encoding: "utf-8" });
-      const dlist = await utils.parseCsPkgLockData(pkgData);
+      const dlist = await utils.parseCsPkgLockData(pkgData, af);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -2096,7 +2108,7 @@ const createCsharpBom = async (path, options) => {
       if (pkgData.charCodeAt(0) === 0xfeff) {
         pkgData = pkgData.slice(1);
       }
-      const dlist = await utils.parseCsPkgData(pkgData);
+      const dlist = await utils.parseCsPkgData(pkgData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
@@ -2113,7 +2125,7 @@ const createCsharpBom = async (path, options) => {
       if (csProjData.charCodeAt(0) === 0xfeff) {
         csProjData = csProjData.slice(1);
       }
-      const dlist = await utils.parseCsProjData(csProjData);
+      const dlist = await utils.parseCsProjData(csProjData, f);
       if (dlist && dlist.length) {
         pkgList = pkgList.concat(dlist);
       }
