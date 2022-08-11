@@ -59,36 +59,39 @@ const GITHUB_URL_PATTERN = /^[a-z+]+:\/\/git@(github\.com|bitbucket\.org)\/(.+?)
  */
 function addGlobalReferences(src, filename, format = "xml") {
   let externalReferences = [];
-  if (format === "json") {
-    externalReferences.push({
-      type: "other",
-      url: src,
-      comment: "Base path",
-    });
-  } else {
-    externalReferences.push({
-      reference: { "@type": "other", url: src, comment: "Base path" },
-    });
-  }
-  let packageFileMeta = filename;
-  if (!filename.includes(src)) {
-    packageFileMeta = pathLib.join(src, filename);
-  }
-  if (format === "json") {
-    externalReferences.push({
-      type: "other",
-      url: packageFileMeta,
-      comment: "Package file",
-    });
-  } else {
-    externalReferences.push({
-      reference: {
-        "@type": "other",
+  const srcs = Array.isArray(src) ? src : [src];
+  srcs.forEach(src => {
+    if (format === "json") {
+      externalReferences.push({
+        type: "other",
+        url: src,
+        comment: "Base path",
+      });
+    } else {
+      externalReferences.push({
+        reference: { "@type": "other", url: src, comment: "Base path" },
+      });
+    }
+    let packageFileMeta = filename;
+    if (!filename.includes(src)) {
+      packageFileMeta = pathLib.join(src, filename);
+    }
+    if (format === "json") {
+      externalReferences.push({
+        type: "other",
         url: packageFileMeta,
         comment: "Package file",
-      },
-    });
-  }
+      });
+    } else {
+      externalReferences.push({
+        reference: {
+          "@type": "other",
+          url: packageFileMeta,
+          comment: "Package file",
+        },
+      });
+    }
+  });
   return externalReferences;
 }
 
@@ -309,7 +312,16 @@ function addComponent(
 
     processHashes(pkg, component, format);
 
-    if (list[component.purl]) return; //remove cycles
+    if (list[component.purl]) {
+      if (list[component.purl]._src) {
+        const srcs = [list[component.purl]._src].flat();
+        if (!srcs.includes(component._src)) {
+          srcs.push(component._src);
+          list[component.purl]._src = srcs;
+        }
+      }
+      return;
+    } //remove cycles
     list[component.purl] = component;
   }
   if (pkg.dependencies) {
@@ -467,7 +479,8 @@ const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
     const jsonComponents = listComponents(options, allImports, pkgInfo, ptype, "json");
     if (context.src) {
       jsonComponents.forEach(component => {
-        if (component._src) component._src = pathLib.relative(context.src, component._src);
+        if (Array.isArray(component._src)) component._src = component._src.map(__src => pathLib.relative(context.src, __src));
+        else if (component._src) component._src = pathLib.relative(context.src, component._src);
       });
     }
 
@@ -486,18 +499,6 @@ const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
           context.filename,
           "json"
       );
-    }
-  }
-
-  if (!options.format || options.format === 'XML') {
-    const xmlComponents = listComponents(options, allImports, pkgInfo, ptype, "xml");
-    if (xmlComponents?.length) {
-      if (context.src) {
-        xmlComponents.forEach(component => {
-          if (component._src) component._src = pathLib.relative(context.src, component._src);
-        });
-      }
-      bomNSData.bomXml = buildBomXml(serialNum, xmlComponents, context);
     }
   }
 
@@ -685,6 +686,11 @@ const createJavaBom = async (path, options) => {
                 encoding: "utf-8",
               })
             );
+            const relPomFile = pathLib.relative(path, pomFiles[0]);
+            bomJonString.components.forEach(c => {
+              c.supplier = 'maven';
+              c._src = relPomFile;
+            });
           } catch (err) {
             if (DEBUG_MODE) {
               console.log(err);
@@ -1164,7 +1170,6 @@ const createNodejsBom = async (path, options) => {
     path,
     (options.multiProject ? "**/" : "") + "yarn.lock"
   );
-  console.log(yarnLockFiles);
   const pkgLockFiles = utils.getAllFiles(
     path,
     (options.multiProject ? "**/" : "") + "package-lock.json"
@@ -2290,10 +2295,6 @@ const createMultiXBom = async (pathList, options) => {
   if (DEBUG_MODE) console.log(`BOM includes ${components.length} components`);
   const serialNum = "urn:uuid:" + uuidv4();
   return {
-    bomXml: buildBomXml(
-      serialNum,
-      listComponents(options, {}, components, undefined, "xml")
-    ),
     bomJson: {
       bomFormat: "CycloneDX",
       specVersion: "1.4",
