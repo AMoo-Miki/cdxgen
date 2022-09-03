@@ -277,7 +277,7 @@ const parsePkgJson = async (pkgJsonFile) => {
       const pkgIdentifier = parsePackageJsonName(pkgData.name);
       pkgList.push({
         name: pkgIdentifier.fullName || pkgData.name,
-        group: pkgIdentifier.scope || "",
+        group: pkgIdentifier.scope ? '@' + pkgIdentifier.scope : '',
         version: pkgData.version,
         _src: pkgJsonFile
       });
@@ -547,7 +547,7 @@ const parseBowerJson = async (bowerJsonFile) => {
       const pkgIdentifier = parsePackageJsonName(pkgData.name);
       pkgList.push({
         name: pkgIdentifier.fullName || pkgData.name,
-        group: pkgIdentifier.scope || "",
+        group: pkgIdentifier.scope ? '@' + pkgIdentifier.scope : '',
         version: pkgData.version || "",
         description: pkgData.description || "",
         license: pkgData.license || "",
@@ -609,7 +609,7 @@ const parseMinJs = async (minJsFile) => {
             const pkgIdentifier = parsePackageJsonName(name);
             pkgList.push({
               name: pkgIdentifier.fullName || pkgData.name,
-              group: pkgIdentifier.scope || "",
+              group: pkgIdentifier.scope ? '@' + pkgIdentifier.scope : '',
               version: tmpB[1].replace(/^v/, "") || "",
               _src: minJsFile,
             });

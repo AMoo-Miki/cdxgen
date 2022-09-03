@@ -1568,7 +1568,7 @@ const createGoBom = async (path, options) => {
           { cwd: path, encoding: "utf-8", timeout: TIMEOUT_MS }
       );
       if (!listEmAllStatus) {
-        const dlist = await utils.parseGoListDep(listEmAllOutput.toString(), gosumMap, path);
+        const dlist = await utils.parseGoListDep(listEmAllOutput.toString(), gosumMap, gomodFiles[0]);
         if (dlist && dlist.length) {
           pkgList = pkgList.concat(dlist);
         }
@@ -1591,7 +1591,7 @@ const createGoBom = async (path, options) => {
       const stdout = result.stdout;
       if (stdout) {
         const cmdOutput = Buffer.from(stdout).toString();
-        const dlist = await utils.parseGoListDep(cmdOutput, gosumMap);
+        const dlist = await utils.parseGoListDep(cmdOutput, gosumMap, gomodFiles[0]);
         if (dlist && dlist.length) {
           pkgList = pkgList.concat(dlist);
         }
