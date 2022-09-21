@@ -34,7 +34,7 @@ six==1.14.0               # via google-api-core, google-api-python-client, googl
 toml==0.10.1              # via dparse
 tqdm==4.46.0              # via -r requirements.in
 uritemplate==3.0.1        # via google-api-python-client
-urllib3==1.25.9           # via requests
+urllib3==1.26.5           # via requests
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip
