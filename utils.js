@@ -692,7 +692,7 @@ const parseMavenTree = function (rawOutput, pomFile) {
         if (pkgArr.length === 4) {
           versionStr = pkgArr[pkgArr.length - 1];
         }
-        const key = pkgArr[0] + "-" + pkgArr[1] + "-" + versionStr;
+        const key = pkgArr[0] + "-" + pkgArr[1] + "@" + versionStr;
         if (!keys_cache[key]) {
           keys_cache[key] = key;
           deps.push({
@@ -716,11 +716,31 @@ exports.parseMavenTree = parseMavenTree;
  */
 const parseGradleDep = function (rawOutput, src) {
   if (typeof rawOutput === "string") {
-    const deps = [];
+    const deps = new Map();
+    const srcChain = [];
     const keys_cache = {};
     const tmpA = rawOutput.split("\n");
+    let prevLineWasEmpty = false;
+    const CONFIG_MATCHER = /^(\w+)\s-\s/i;
     tmpA.forEach((l) => {
+      if (!l) {
+        prevLineWasEmpty = true;
+        return;
+      }
+
+      if (prevLineWasEmpty) {
+        prevLineWasEmpty = false;
+        const m = l.match(CONFIG_MATCHER);
+        if (m !== null) {
+          srcChain.splice(0, srcChain.length, m[1]);
+          return;
+        }
+      }
+
       if (l.indexOf("--- ") >= 0) {
+        const lvl = Math.ceil(l.indexOf("--- ") / 5);
+        srcChain.splice(lvl);
+
         l = l.substr(l.indexOf("--- ") + 4, l.length).trim();
         l = l.replace(" (*)", "");
         const verArr = l.split(":");
@@ -732,25 +752,29 @@ const parseGradleDep = function (rawOutput, src) {
               .trim();
           }
           versionStr = versionStr.split(" ")[0];
-          const key = verArr[0] + "-" + verArr[1] + "-" + versionStr;
-          // Filter duplicates
-          if (!keys_cache[key]) {
-            keys_cache[key] = key;
-            const group = verArr[0].trim();
-            if (group !== "project") {
-              deps.push({
-                group,
-                name: verArr[1].trim(),
-                version: versionStr,
-                qualifiers: { type: "jar" },
-                _src: src,
-              });
+          const group = verArr[0].trim();
+          const name = verArr[1].trim();
+          const key = group + "-" + verArr[1] + "@" + versionStr;
+          srcChain.push(key);
+
+          if (group !== "project") {
+            if (deps.has(key)) {
+              deps.get(key)._src.push([src, ...srcChain]);
+              return;
             }
+
+            deps.set(key, {
+              group,
+              name: name,
+              version: versionStr,
+              qualifiers: { type: "jar" },
+              _src: [[src, ...srcChain]],
+            });
           }
         }
       }
     });
-    return deps;
+    return [...deps.values()];
   }
   return [];
 };
@@ -1256,7 +1280,7 @@ const parseReqFile = async function (reqData, reqFile) {
             _src: reqFile
           });
         }
-      } else if (/[>|\[@]/.test(l)) {
+      } else if (/[>|\[@]/.test(l) && !/^(git\+)?https?:\/\//.test(l)) {
         let tmpA = l.split(/[>\[@]/);
         if (tmpA.includes("#")) {
           tmpA = tmpA.split("#")[0];
@@ -1570,7 +1594,7 @@ const parseGoListDep = async function (rawOutput, gosumMap, src) {
     for (let l of pkgs) {
       const verArr = l.trim().replace(new RegExp("[\"']", "g"), "").split(" ");
       if (verArr && verArr.length === 2) {
-        const key = verArr[0] + "-" + verArr[1];
+        const key = verArr[0] + "@" + verArr[1];
         // Filter duplicates
         if (!keys_cache[key]) {
           keys_cache[key] = key;

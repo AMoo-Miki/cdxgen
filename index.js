@@ -250,7 +250,7 @@ function addComponent(
       pversion = m[3];
     }
 
-    let licenses = utils.getLicenses(pkg, format);
+    let licenses = pkg.licenses || utils.getLicenses(pkg, format);
     let purl = new PackageURL(
       pptype,
       group,
@@ -479,8 +479,12 @@ const buildBomNSData = (options, pkgInfo, ptype, context = {}) => {
     const jsonComponents = listComponents(options, allImports, pkgInfo, ptype, "json");
     if (context.src) {
       jsonComponents.forEach(component => {
-        if (Array.isArray(component._src)) component._src = component._src.map(__src => pathLib.relative(context.src, __src));
-        else if (component._src) component._src = pathLib.relative(context.src, component._src);
+        component._src = Array.isArray(component._src)
+            ? component._src.map(__src => Array.isArray(__src)
+                ? [ pathLib.relative(context.src, __src[0]), ...__src.slice(1) ]
+                : pathLib.relative(context.src, __src)
+            )
+            : pathLib.relative(context.src, component._src);
       });
     }
 
@@ -582,7 +586,7 @@ const createJavaBom = async (path, options) => {
     const pomFiles = utils.getAllFiles(path, "pom.xml");
     if (pomFiles && pomFiles.length) {
       let mvnArgs = [
-        "org.cyclonedx:cyclonedx-maven-plugin:2.7.0:makeAggregateBom",
+        "org.cyclonedx:cyclonedx-maven-plugin:2.7.2:makeAggregateBom",
       ];
       // By using quiet mode we can reduce the maxBuffer used and avoid crashes
       if (!DEBUG_MODE) {
@@ -1999,7 +2003,7 @@ const createRubyBom = async (path, options) => {
     for (let f of gemFiles) {
       const basePath = pathLib.dirname(f);
       if (DEBUG_MODE) console.log("Executing 'bundle install' in", basePath);
-      const result = spawnSync("bundle", ["install"], {
+      const result = spawnSync("bundle", ["install", '--path', '___vendor/bundle'], {
         cwd: basePath,
         encoding: "utf-8",
       });
