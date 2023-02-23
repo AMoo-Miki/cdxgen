@@ -1087,7 +1087,7 @@ const getPyMetadata = async function (pkgList, fetchIndirectDeps) {
       continue;
     }
     try {
-      if (p.name.includes("https")) {
+      if (p.name.includes("https:")) {
         cdepList.push(p);
         continue;
       }
@@ -1254,7 +1254,7 @@ exports.parsePoetrylockData = parsePoetrylockData;
  *
  * @param {Object} reqData Requirements.txt data
  */
-const parseReqFile = async function (reqData, reqFile) {
+const parseReqFile = async function (reqData, reqFile, getMetadata = true) {
   const pkgList = [];
   let fetchIndirectDeps = false;
   reqData.split("\n").forEach((l) => {
@@ -1300,6 +1300,8 @@ const parseReqFile = async function (reqData, reqFile) {
       }
     }
   });
+
+  if (!getMetadata) return pkgList;
   return await getPyMetadata(pkgList, fetchIndirectDeps);
 };
 exports.parseReqFile = parseReqFile;
@@ -3077,7 +3079,7 @@ const findPython = () => {
   if (!CMD_PYTHON) throw 'NOT_FOUND_PYTHON';
 
   try {
-    executeCmd(CMD_PYTHON, ['-m', 'pip', 'install', '-U', 'pigar']);
+    executeCmd(CMD_PYTHON, ['-m', 'pip', 'install', '-U', 'pigar==1.0.2']);
   } catch (ex) {}
 
   return CMD_PYTHON;

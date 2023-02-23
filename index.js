@@ -1421,7 +1421,7 @@ const createPythonBom = async (path, options) => {
         executePython(['-m', 'pip', 'install', '--user', '.'], pathLib.dirname(f));
       } catch (ex) {}
       try {
-        executePython(['-m', 'pigar', '-y'], pathLib.dirname(f));
+        executePython(['-m', 'pigar', '-y', '-p', 'extracted-requirements.txt'], pathLib.dirname(f));
       } catch (ex) {}
     }
   }
@@ -1429,48 +1429,47 @@ const createPythonBom = async (path, options) => {
   const
       reqFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "requirements.txt"),
       reqDirFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "requirements/*.txt");
-  if (reqFiles?.length || reqDirFiles?.length) {
-    let metadataFilename = "requirements.txt";
 
-    if (reqFiles?.length) {
-      for (let f of reqFiles) {
-        const reqData = fs.readFileSync(f, { encoding: "utf-8" });
-        const dlist = await utils.parseReqFile(reqData, f);
-        if (dlist?.length) pkgList.push(...dlist);
-      }
+  const metadataFilenames = [];
 
-      metadataFilename = reqFiles.join(", ");
+  if (reqFiles?.length) {
+    for (let f of reqFiles) {
+      try {
+        executePython(['-m', 'pigar', '-y', '-p', './extracted-requirements.txt'], pathLib.dirname(f));
+      } catch (ex) {}
+      const reqData = fs.readFileSync(f, { encoding: "utf-8" });
+      const dlist = await utils.parseReqFile(reqData, f);
+      if (dlist?.length) pkgList.push(...dlist);
     }
 
-    if (reqDirFiles && reqDirFiles.length) {
-      for (let f of reqDirFiles) {
-        const reqData = fs.readFileSync(f, { encoding: "utf-8" });
-        const dlist = await utils.parseReqFile(reqData, f);
-        if (dlist?.length) pkgList.push(...dlist);
-      }
-      metadataFilename = reqDirFiles.join(", ");
-    }
-
-    return buildBomNSData(options, pkgList, "pypi", {
-      src: path,
-      filename: metadataFilename,
-    });
+    metadataFilenames.push(...reqFiles);
   }
 
-  const setupPy = pathLib.join(path, "setup.py");
-  const setupPyMode = fs.existsSync(setupPy);
-  if (setupPyMode) {
-    try {
-      executePython(['-m', 'pip', 'install', '--user', '.'], pathLib.dirname(setupPy));
-    } catch (ex) {
-      console.log('ex', ex);
+  if (reqDirFiles?.length) {
+    for (let f of reqDirFiles) {
+      const reqData = fs.readFileSync(f, { encoding: "utf-8" });
+      const dlist = await utils.parseReqFile(reqData, f);
+      if (dlist?.length) pkgList.push(...dlist);
     }
+    metadataFilenames.push(reqDirFiles);
+  }
 
-    const reqData = executePython(['-m', 'pip', 'freeze'], pathLib.dirname(setupPy));
-    const pkgList = await utils.parseReqFile(reqData, setupPy);
+  const extFiles = utils.getAllFiles(path, (options.multiProject ? "**/" : "") + "extracted-requirements.txt");
+  if (extFiles?.length) {
+    for (let f of extFiles) {
+      const plist = pkgList.map(pkg => pkg.name);
+      const extData = fs.readFileSync(f, { encoding: "utf-8" });
+      const alist = await utils.parseReqFile(extData, f, false);
+      const difflist = alist.filter(({ name }) => !plist.includes(name));
+      const dlist = await getPyMetadata(difflist, false);
+      if (dlist?.length) pkgList.push(...dlist);
+    }
+  }
+
+  if (pkgList.length) {
     return buildBomNSData(options, pkgList, "pypi", {
       src: path,
-      filename: "setup.py",
+      filename: metadataFilenames.join(', '),
     });
   }
 
