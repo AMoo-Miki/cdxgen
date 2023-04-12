@@ -43,11 +43,11 @@
     "url": "https://github.com/AMoo-Miki/cdxgen/issues"
   },
   "dependencies": {
-    "@babel/parser": "^7.17.9",
-    "@babel/traverse": "^7.17.9",
+    "@babel/parser": "^7.21.4",
+    "@babel/traverse": "^7.21.4",
     "@yarnpkg/lockfile": "^1.1.0",
-    "cheerio": "^1.0.0-rc.10",
-    "glob": "^8.0.1",
+    "cheerio": "^1.0.0-rc.12",
+    "glob": "^8.1.0",
     "global-agent": "^3.0.0",
     "got": "^11.8.5",
     "js-yaml": "^4.1.0",
