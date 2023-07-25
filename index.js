@@ -13,7 +13,7 @@ const { findJSImports } = require("./analyzer");
 const semver = require("semver");
 const dockerLib = require("./docker");
 const binaryLib = require("./binary");
-const { executeCmd, executePython } = require("./utils");
+const { executeCmd, executePython, getPyMetadata } = require("./utils");
 
 // Construct maven command
 let MVN_CMD = "mvn";
