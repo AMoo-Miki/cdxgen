@@ -1097,7 +1097,7 @@
           "description": "The name of the property. Duplicate names are allowed, each potentially having a different value."
         },
         "value": {
-          "type": "string",
+          "type": ["string", "array"],
           "title": "Value",
           "description": "The value of the property."
         }
