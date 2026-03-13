@@ -186,6 +186,11 @@ const args = _yargs
     description:
       "Install dependencies automatically for some projects. Defaults to true but disabled for containers and oci scans. Use --no-install-deps to disable this feature.",
   })
+  .option("npm-install-count", {
+    type: "number",
+    description:
+      "Limit the number of automatic npm installs to projects with at most this many package.json files. Set to -1 for no limit. Defaults to -1.",
+  })
   .option("validate", {
     type: "boolean",
     default: true,
