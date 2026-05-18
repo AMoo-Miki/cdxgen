@@ -1,5 +1,5 @@
 {
-  "name": "@cyclonedx/cdxgen",
+  "name": "@AMoo-Miki/cdxgen",
   "version": "12.4.0",
   "description": "Creates CycloneDX Software Bill of Materials (SBOM) from source or container image",
   "keywords": [
@@ -15,13 +15,13 @@
     "appsec",
     "scrm"
   ],
-  "homepage": "http://github.com/cdxgen/cdxgen",
+  "homepage": "https://github.com/AMoo-Miki/cdxgen",
   "bugs": {
-    "url": "https://github.com/cdxgen/cdxgen/issues"
+    "url": "https://github.com/AMoo-Miki/cdxgen/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cdxgen/cdxgen.git"
+    "url": "git+https://github.com/AMoo-Miki/cdxgen.git"
   },
   "license": "Apache-2.0",
   "author": "Prabhu Subramanian <prabhu@appthreat.com>",
