@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net6.0": {
+      "FeatureA": {
+        "type": "Direct",
+        "requested": "[1.2.0, )",
+        "resolved": "1.2.0",
+        "contentHash": "fakeFeatureA==",
+        "dependencies": {
+          "SharedCore": "2.5.1"
+        }
+      },
+      "FeatureB": {
+        "type": "Direct",
+        "requested": "[1.3.0, )",
+        "resolved": "1.3.0",
+        "contentHash": "fakeFeatureB==",
+        "dependencies": {
+          "SharedCore": "2.5.1"
+        }
+      },
+      "DevTool": {
+        "type": "Direct",
+        "requested": "[0.9.0, )",
+        "resolved": "0.9.0",
+        "contentHash": "fakeDevTool==",
+        "dependencies": {
+          "SharedCore": "2.5.1"
+        }
+      },
+      "SharedCore": {
+        "type": "Transitive",
+        "resolved": "2.5.1",
+        "contentHash": "fakeSharedCore==",
+        "dependencies": {
+          "LowLevelUtil": "3.0.0"
+        }
+      },
+      "LowLevelUtil": {
+        "type": "Transitive",
+        "resolved": "3.0.0",
+        "contentHash": "fakeLowLevelUtil=="
+      }
+    }
+  }
+}

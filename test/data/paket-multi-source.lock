@@ -1,0 +1,11 @@
+NUGET
+  remote: https://api.nuget.org/v3/index.json
+    FeatureA (1.2.0)
+      SharedCore (>= 2.5.1)
+    FeatureB (1.3.0)
+      SharedCore (>= 2.5.1)
+    DevTool (0.9.0)
+      SharedCore (>= 2.5.1)
+    SharedCore (2.5.1)
+      LowLevelUtil (>= 3.0.0)
+    LowLevelUtil (3.0.0)

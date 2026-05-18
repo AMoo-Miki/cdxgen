@@ -1,0 +1,55 @@
+{
+  "_readme": "Synthetic .NET project.assets.json fixture used by cdxgen tests to exercise multi-source SrcFile chains. Topology: SampleApp -> {FeatureA, FeatureB}; FeatureA,FeatureB,DevTool -> SharedCore -> LowLevelUtil.",
+  "version": 3,
+  "targets": {
+    "net6.0": {
+      "FeatureA/1.2.0": {
+        "type": "package",
+        "dependencies": {
+          "SharedCore": "2.5.1"
+        }
+      },
+      "FeatureB/1.3.0": {
+        "type": "package",
+        "dependencies": {
+          "SharedCore": "2.5.1"
+        }
+      },
+      "SharedCore/2.5.1": {
+        "type": "package",
+        "dependencies": {
+          "LowLevelUtil": "3.0.0"
+        }
+      },
+      "LowLevelUtil/3.0.0": {
+        "type": "package"
+      },
+      "DevTool/0.9.0": {
+        "type": "package",
+        "dependencies": {
+          "SharedCore": "2.5.1"
+        }
+      }
+    }
+  },
+  "libraries": {
+    "FeatureA/1.2.0": { "sha512": "fakeFeatureA", "type": "package", "path": "featurea/1.2.0", "files": ["lib/FeatureA.dll"] },
+    "FeatureB/1.3.0": { "sha512": "fakeFeatureB", "type": "package", "path": "featureb/1.3.0", "files": ["lib/FeatureB.dll"] },
+    "SharedCore/2.5.1": { "sha512": "fakeSharedCore", "type": "package", "path": "sharedcore/2.5.1", "files": ["lib/SharedCore.dll"] },
+    "LowLevelUtil/3.0.0": { "sha512": "fakeLowLevelUtil", "type": "package", "path": "lowlevelutil/3.0.0", "files": ["lib/LowLevelUtil.dll"] },
+    "DevTool/0.9.0": { "sha512": "fakeDevTool", "type": "package", "path": "devtool/0.9.0", "files": ["lib/DevTool.dll"] }
+  },
+  "projectFileDependencyGroups": {
+    "net6.0": [
+      "FeatureA >= 1.2.0",
+      "FeatureB >= 1.3.0",
+      "DevTool >= 0.9.0"
+    ]
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectName": "SampleApp"
+    }
+  }
+}

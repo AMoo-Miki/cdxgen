@@ -1,0 +1,30 @@
+{
+  "version": "0.4",
+  "graph_lock": {
+    "revisions_enabled": false,
+    "nodes": {
+      "0": {
+        "requires": ["1", "2", "5"]
+      },
+      "1": {
+        "ref": "feature-a/1.2.0",
+        "requires": ["3"]
+      },
+      "2": {
+        "ref": "feature-b/1.3.0",
+        "requires": ["3"]
+      },
+      "3": {
+        "ref": "shared-core/2.5.1",
+        "requires": ["4"]
+      },
+      "4": {
+        "ref": "low-level-util/3.0.0"
+      },
+      "5": {
+        "ref": "dev-tool/0.9.0",
+        "requires": ["3"]
+      }
+    }
+  }
+}
