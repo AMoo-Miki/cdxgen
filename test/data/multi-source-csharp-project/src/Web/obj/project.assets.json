@@ -1,0 +1,28 @@
+{
+  "version": 3,
+  "targets": {
+    "net6.0": {
+      "FeatureA/1.2.0": {
+        "type": "package",
+        "dependencies": { "SharedCore": "2.5.1" }
+      },
+      "SharedCore/2.5.1": {
+        "type": "package",
+        "dependencies": { "LowLevelUtil": "3.0.0" }
+      },
+      "LowLevelUtil/3.0.0": { "type": "package" }
+    }
+  },
+  "libraries": {
+    "FeatureA/1.2.0": { "sha512": "aaa", "type": "package", "path": "featurea/1.2.0", "files": ["lib/FeatureA.dll"] },
+    "SharedCore/2.5.1": { "sha512": "bbb", "type": "package", "path": "sharedcore/2.5.1", "files": ["lib/SharedCore.dll"] },
+    "LowLevelUtil/3.0.0": { "sha512": "ccc", "type": "package", "path": "lowlevelutil/3.0.0", "files": ["lib/LowLevelUtil.dll"] }
+  },
+  "projectFileDependencyGroups": {
+    "net6.0": ["FeatureA >= 1.2.0"]
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": { "projectName": "Acme.Web" }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "acme/worker",
+  "version": "1.0.0",
+  "require": {
+    "php": ">=8.1",
+    "acme/feature-b": "^1.0"
+  }
+}

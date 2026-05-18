@@ -1,0 +1,21 @@
+lockfileVersion: '6.0'
+
+dependencies:
+  feature-a:
+    specifier: 1.2.0
+    version: 1.2.0
+
+packages:
+
+  /feature-a@1.2.0:
+    resolution: {integrity: sha512-aaa}
+    dependencies:
+      shared-core: 2.5.1
+
+  /shared-core@2.5.1:
+    resolution: {integrity: sha512-bbb}
+    dependencies:
+      low-level-util: 3.0.0
+
+  /low-level-util@3.0.0:
+    resolution: {integrity: sha512-ccc}

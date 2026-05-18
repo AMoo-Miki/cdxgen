@@ -1,0 +1,33 @@
+{
+  "_readme": ["Synthetic web service lock for multi-source SrcFile testing"],
+  "content-hash": "1111111111111111111111111111111111111111111111111111111111111111",
+  "packages": [
+    {
+      "name": "acme/feature-a",
+      "version": "1.2.0",
+      "type": "library",
+      "require": { "php": ">=8.1", "acme/shared-core": "^2.0" },
+      "license": ["MIT"],
+      "description": "Web service feature"
+    },
+    {
+      "name": "acme/shared-core",
+      "version": "2.5.1",
+      "type": "library",
+      "require": { "php": ">=8.1", "acme/low-level-util": "^3.0" },
+      "license": ["MIT"],
+      "description": "Shared core (also used by worker)"
+    },
+    {
+      "name": "acme/low-level-util",
+      "version": "3.0.0",
+      "type": "library",
+      "require": { "php": ">=8.1" },
+      "license": ["MIT"],
+      "description": "Leaf utility"
+    }
+  ],
+  "packages-dev": [],
+  "platform": { "php": ">=8.1" },
+  "platform-dev": []
+}

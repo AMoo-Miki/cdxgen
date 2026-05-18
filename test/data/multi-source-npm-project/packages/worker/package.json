@@ -1,0 +1,8 @@
+{
+  "name": "acme-worker",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "feature-b": "1.3.0"
+  }
+}

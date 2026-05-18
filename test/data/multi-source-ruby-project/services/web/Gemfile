@@ -1,0 +1,2 @@
+source "https://rubygems.org"
+gem "feature-a", "1.2.0"

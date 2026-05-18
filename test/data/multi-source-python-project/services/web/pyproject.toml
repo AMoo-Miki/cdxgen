@@ -1,0 +1,7 @@
+[tool.poetry]
+name = "acme-web"
+version = "1.0.0"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+feature-a = "1.2.0"

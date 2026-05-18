@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net6.0": {
+      "FeatureA": {
+        "type": "Direct",
+        "requested": "[1.2.0, )",
+        "resolved": "1.2.0",
+        "contentHash": "aaa==",
+        "dependencies": { "SharedCore": "2.5.1" }
+      },
+      "SharedCore": {
+        "type": "Transitive",
+        "resolved": "2.5.1",
+        "contentHash": "bbb==",
+        "dependencies": { "LowLevelUtil": "3.0.0" }
+      },
+      "LowLevelUtil": {
+        "type": "Transitive",
+        "resolved": "3.0.0",
+        "contentHash": "ccc=="
+      }
+    }
+  }
+}

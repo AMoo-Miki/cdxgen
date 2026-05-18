@@ -1,0 +1,8 @@
+{
+  "name": "acme/web",
+  "version": "1.0.0",
+  "require": {
+    "php": ">=8.1",
+    "acme/feature-a": "^1.0"
+  }
+}

@@ -1,0 +1,17 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    feature-b (1.3.0)
+      shared-core (= 2.5.1)
+    shared-core (2.5.1)
+      low-level-util (= 3.0.0)
+    low-level-util (3.0.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  feature-b (= 1.3.0)
+
+BUNDLED WITH
+   2.4.0
